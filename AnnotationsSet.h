@@ -6,6 +6,9 @@
 
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include "QtCvUtils.h"
+
+
 
 
 
@@ -26,6 +29,17 @@ namespace AnnotationUtilities
     {
         return (p.x>=0 && p.x<im.cols && p.y>=0 && p.y<im.rows);
     }
+
+    // original function found at https://stackoverflow.com/questions/1494399/how-do-i-search-find-and-replace-in-a-standard-string
+    inline void strReplace(std::string& str, const std::string& token, const std::string& replace)
+    {
+        std::string::size_type pos = 0u;
+        while ((pos = str.find(token, pos)) != std::string::npos)
+        {
+            str.replace(pos, token.length(), replace);
+            pos += replace.length();
+        }
+    }
 }
 
 
@@ -43,33 +57,89 @@ namespace AnnotationUtilities
 enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects};
 
 
-struct AnnotationsProperties
+class AnnotationsProperties
 {
 public:
+    AnnotationsProperties() {}
+    AnnotationsProperties(const AnnotationsProperties& ap) : className(ap.className), classType(ap.classType),
+                                                             displayRGBColor(ap.displayRGBColor), minIdBGRRecRange(ap.minIdBGRRecRange), maxIdBGRRecRange(ap.maxIdBGRRecRange) {}
+    AnnotationsProperties& operator=(const AnnotationsProperties& ap)
+    {
+        this->className = ap.className;
+        this->classType = ap.classType;
+        this->displayRGBColor = ap.displayRGBColor;
+        this->minIdBGRRecRange = ap.minIdBGRRecRange;
+        this->maxIdBGRRecRange = ap.maxIdBGRRecRange;
+        return (*this);
+    }
+
+    void write(cv::FileStorage& fs) const
+    {
+        fs << "{:";
+        fs << "Name" << this->className;
+        fs << "Type" << (int)this->classType;
+        fs << "DispColRGB" << this->displayRGBColor;
+        fs << "IdRecRangeMinBGR" << this->minIdBGRRecRange;
+        fs << "IdRecRangeMaxBGR" << this->maxIdBGRRecRange;
+        fs << "}";
+    }
+
+    void read(const cv::FileNode& node)
+    {
+        node["Name"] >> this->className;
+        int typeInt;
+        node["Type"] >> typeInt;
+        this->classType = (typeInt==_ACT_Uniform? _ACT_Uniform : _ACT_MultipleObjects);
+        node["DispColRGB"] >> this->displayRGBColor;
+        node["IdRecRangeMinBGR"] >> this->minIdBGRRecRange;
+        node["IdRecRangeMaxBGR"] >> this->maxIdBGRRecRange;
+    }
+
     //int ClassId;
-    std::string ClassName;
+    std::string className;
     AnnotationClassType classType;
     cv::Vec3b displayRGBColor;
-    cv::Vec3b minIdRepRange, maxIdRepRange; // available range for encoding both the Id and the class. In BGR!!!
+    cv::Vec3b minIdBGRRecRange, maxIdBGRRecRange; // available range for encoding both the Id and the class. In BGR!!!
                                             // when in uniform class type, max and min shall be identical. Either way, only the min value will be used
                                             // when in MultipleObjects mode, setting min=Vec3b(0,0,128) and max=(255,255,128) allows
-                                            // the Id to be encoded on B and G channels, which offers 16 bits of space.
+                                            // the Id to be encoded on B and G channels, which provides 16 bits of latitude.
 };
+
+
+static void write(cv::FileStorage& fs, const std::string&, const AnnotationsProperties& x)
+{
+    x.write(fs);
+}
+
+static void read(const cv::FileNode& node, AnnotationsProperties& x, const AnnotationsProperties& default_value = AnnotationsProperties())
+{
+    if (node.empty())
+        x = default_value;
+    else
+        x.read(node);
+}
 
 
 
 
 
 /*
- * Set of annotations properties. Please note that the numbering starts from 1 and not from 0
+ * Set of annotations properties. Please note that the class numbering starts from 1 and not from 0
  * This allows us to store 0 as a "non-class" in the pixel images
  */
+
+
+const std::string _AnnotationsConfig_FileNamingToken_OrigImgPath = "%OrImPa%";
+const std::string _AnnotationsConfig_FileNamingToken_OrigImgFileName = "%OrImFiNa%";
+const std::string _AnnotationsConfig_FileNamingToken_FrameNumber = "%FrNu%";
+const int _AnnotationsConfig_FileNamingToken_FrameNumberZeroFillLength = 6;
+
 
 class AnnotationsConfig
 {
 public:
     AnnotationsConfig() {}
-    AnnotationsConfig(const AnnotationsConfig& ac) { this->propsSet = ac.getPropsSet(); this->fileNamingRule = ac.getFileNamingRule(); }
+    AnnotationsConfig(const AnnotationsConfig& ac); //{ this->propsSet = ac.getPropsSet(); this->fileNamingRule = ac.getFileNamingRule(); }
     ~AnnotationsConfig() {}
 
     // classic accessors stuff
@@ -81,15 +151,28 @@ public:
     void removeProperty(int id) { if (id<1 || id>=(int)this->propsSet.size()) return; this->propsSet.erase(this->propsSet.begin()+id-1); }
     void clearProperties() { this->propsSet.clear(); }
 
-    void setFileNamingRule(const std::string& rule) { this->fileNamingRule = rule; }
-    const std::string& getFileNamingRule() const { return this->fileNamingRule; }
+    void setImageFileNamingRule(const std::string& rule) { this->imageFileNamingRule = rule; }
+    const std::string& getImageFileNamingRule() const { return this->imageFileNamingRule; }
+    void setSummaryFileNamingRule(const std::string& rule) { this->summaryFileNamingRule = rule; }
+    const std::string& getSummaryFileNamingRule() const { return this->summaryFileNamingRule; }
+
+    std::string getAnnotatedImageFileName(const std::string& origImgPath, const std::string& origImgFileName, int frameNumber) const;
+    std::string getSummaryFileName(const std::string& origImgPath, const std::string& origiImgFileName) const;
+
+
+
+
+    void writeContentToYaml(cv::FileStorage& fs) const;
+    void readContentFromYaml(const cv::FileNode& fnd);
+
 
 
 
 private:
     std::vector<AnnotationsProperties> propsSet;
 
-    std::string fileNamingRule;
+    std::string imageFileNamingRule;
+    std::string summaryFileNamingRule;
 };
 
 
@@ -100,13 +183,44 @@ private:
 // however, managing such data is complex, since it introduces redundancy... it forces us to maintain consistency throughout the database,
 // which can be sometimes rather complex...
 
-struct AnnotationObject
+class AnnotationObject
 {
+public:
+    AnnotationObject() : ClassId(0), ObjectId(0), FrameNumber(0) {}
+    AnnotationObject(const AnnotationObject& ao) : ClassId(ao.ClassId), ObjectId(ao.ObjectId), FrameNumber(ao.FrameNumber), BoundingBox(ao.BoundingBox) {}
+    AnnotationObject& operator=(const AnnotationObject& ao) { this->ClassId=ao.ClassId; this->ObjectId=ao.ObjectId; this->FrameNumber=ao.FrameNumber; this->BoundingBox=ao.BoundingBox; return *(this); }
+
+    void write(cv::FileStorage& fs) const
+    {
+        fs << "{:" << "C" << this->ClassId << "O" << this->ObjectId << "F" << this->FrameNumber << "B" << this->BoundingBox << "}";
+    }
+
+    void read(const cv::FileNode& node)
+    {
+        this->ClassId = (int)node["C"];
+        this->ObjectId = (int)node["O"];
+        this->FrameNumber = (int)node["F"];
+        node["B"] >> this->BoundingBox;
+    }
+
     int ClassId;
     int ObjectId;
     int FrameNumber;
     cv::Rect2i BoundingBox;
 };
+
+static void write(cv::FileStorage& fs, const std::string&, const AnnotationObject& x)
+{
+    x.write(fs);
+}
+
+static void read(const cv::FileNode& node, AnnotationObject& x, const AnnotationObject& default_value = AnnotationObject())
+{
+    if (node.empty())
+        x = default_value;
+    else
+        x.read(node);
+}
 
 
 
@@ -134,6 +248,14 @@ public:
     void updateBoundingBox(int annotationIndex, const cv::Rect2i newBB);    // edit a bounding box given the object ID in the record vector
     void removeAnnotation(int annotationIndex);                             // remove an annotation given its id in the record vector
     void clearFrame(int frameId);                                           // remove all of the objects included in a given frame
+
+
+    void clear();   // the ultimate killer - simply clear all of the vectors
+
+
+    void writeContentToYaml(cv::FileStorage& fs) const;
+    void readContentFromYaml(const cv::FileNode& fnd);
+
 
 
 private:
@@ -164,14 +286,17 @@ public:
     ~AnnotationsSet();
 
 
+    // standard accessors stuff.. those images are returned for index = currentImgIndex
     const cv::Mat& getCurrentOriginalImg() const;
     const cv::Mat& getCurrentAnnotationsClasses() const;
     const cv::Mat& getCurrentAnnotationsIds() const;
 
+    // access any image within the buffer
     const cv::Mat& getOriginalImg(int id) const;
     const cv::Mat& getAnnotationsClasses(int id) const;
     const cv::Mat& getAnnotationsIds(int id) const;
 
+    // get the object Id (within the record) to which the pixel (x,y) belongs in the current image
     int getObjectIdAtPosition(int x, int y) const;
 
 
@@ -181,6 +306,31 @@ public:
 
 
     bool loadOriginalImage(const std::string& imgFileName);
+    bool loadOriginalVideo(const std::string& videoFileName);
+    bool loadAnnotations(const std::string& annotationsFileName);
+
+
+    bool loadNextFrame();
+    bool loadFrame(int fId);
+
+    void closeFile(bool pleaseSave=false);
+
+
+    bool isVideoOpen() const;
+    bool isImageOpen() const;
+
+
+    bool canReadNextFrame() const;
+    bool canReadPrevFrame() const;
+
+
+
+
+
+    bool saveCurrentAnnotationImage(const std::string& forcedFileName="") const;
+
+    bool saveCurrentState(const std::string& forceFileName="") const;
+
 
 
     int addAnnotation(const cv::Mat& mask, const cv::Point2i& topLeftCorner, int whichClass, const cv::Point2i& annotStartingPoint=cv::Point2i(-1,-1));
@@ -225,6 +375,8 @@ private:
 
     // in order to know where we are within the buffer
     int currentImgIndex;
+    int maxImgReached;
+    bool reachedTheEndOfVideo;
 
     // those buffers will be assigned dynamically, in case we need to change their length
     int bufferLength;
@@ -238,7 +390,13 @@ private:
     // this vector stores the first known available per class
     //std::vector<int> firstKnownAvailableObjectId;
 
+    // video accessor object
+    cv::VideoCapture vidCap;
+
+
+    // store the image/video loaded
     std::string imageFileName;
+    std::string imageFilePath;
 };
 
 

@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QColor>
 #include <QDebug>
+#include <QDir>
 
 
 
@@ -112,6 +113,25 @@ namespace QtCvUtils
         return QRect(QPoint(r.tl().x, r.tl().y), QSize(r.size().width, r.size().height));
    }
 
+
+   inline bool imwrite(const std::string& fileName, const cv::Mat& img)
+   {
+       // this function generates the standard image file
+       // main difference with imwrite is that it can generate the path on the fly, using Qt
+       const QString filePath = QString::fromStdString(fileName);
+       QDir().mkpath(QFileInfo(filePath).absolutePath());
+
+       return cv::imwrite(fileName, img);
+   }
+
+
+   inline void generatePath(const std::string& fileName)
+   {
+       // this function generates the standard image file
+       // main difference with imwrite is that it can generate the path on the fly, using Qt
+       const QString filePath = QString::fromStdString(fileName);
+       QDir().mkpath(QFileInfo(filePath).absolutePath());
+   }
 
 }
 

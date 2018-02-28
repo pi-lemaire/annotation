@@ -138,7 +138,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
 
             htmlCode += "<tr>";
             htmlCode += "<td align=left>" + sourceTag + boldTagOpen + selectionLink + tr("Frame", "Annotation Browser") + " " + QString::number(currObj.FrameNumber) + "</a>" + boldTagClosed + "</td>";
-            htmlCode += "<td align=left>- " + boldTagOpen + selectionLink + QString::fromStdString(this->annots->getConfig().getProperty(currObj.ClassId).ClassName) + "</a>" + boldTagClosed + " -</td>";
+            htmlCode += "<td align=left>- " + boldTagOpen + selectionLink + QString::fromStdString(this->annots->getConfig().getProperty(currObj.ClassId).className) + "</a>" + boldTagClosed + " -</td>";
             htmlCode += "<td align=left>" + boldTagOpen + selectionLink + tr("Object #", "Annotation Browser") + QString::number(currObj.ObjectId) + "</a>" + boldTagClosed + "</td>";
             // htmlCode += "<td align=right><a href='chk_" + QString::number(frameNum) + "_" + QString::number(woodblockId) + "'><img src='" + checkBoxImg + "' /></a></td>";
             htmlCode += "</tr>";

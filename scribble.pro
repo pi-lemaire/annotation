@@ -33,9 +33,9 @@ HEADERS       = \
 SOURCES       = main.cpp \
     AnnotateArea.cpp \
     AnnotationsSet.cpp \
-    MainWindow.cpp \
     DialogClassSelection.cpp \
-    AnnotationsBrowser.cpp
+    AnnotationsBrowser.cpp \
+    MainWindow.cpp
 
 # install
 target.path = $$[QT_INSTALL_EXAMPLES]/widgets/widgets/scribble

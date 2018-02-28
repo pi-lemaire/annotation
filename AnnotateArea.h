@@ -81,23 +81,38 @@ public:
     AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent = 0);
 
     bool openImage(const QString &fileName);
+    bool openVideo(const QString &fileName);
+    bool openAnnotations(const QString &fileName);
     bool saveImage(const QString &fileName, const char *fileFormat);
     // void setPenColor(const QColor &newColor);
     void setPenWidth(int newWidth);
+
+
+    //void displayNextFrame();
+    void displayFrame(int id);
+    void reload();
+
 
     bool isModified() const { return modified; }
     QColor penColor() const { return myPenColor; }
     int penWidth() const { return myPenWidth; }
 
+
 public slots:
+    void displayNextFrame();
+    void displayPrevFrame();
+
     void clearImage();
     void print();
     void switchRubberMode();
     void selectClassId(int);
     void selectAnnotation(int);
 
+
 signals:
     void selectedObject(int);
+    void updateSignal();
+
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -110,7 +125,9 @@ private:
     void drawLineTo(const QPoint &endPoint);
     //void resizeImage(QImage *image, const QSize &newSize);
 
-    void updateContent();
+    //void updateContent();
+    void updatePaintImage(const QRect& ROI=QRect(-3, -3, 0, 0));
+
 
     bool modified;
     bool scribbling, rubberMode;
@@ -122,7 +139,6 @@ private:
     QRect ObjectROI;
 
     QBitmap CursorBitmap;
-    //QImage image;
     QPoint lastPoint, firstAnnotPoint;
 
     AnnotationsSet *annotations;

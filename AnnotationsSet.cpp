@@ -16,6 +16,100 @@ using namespace cv;
 
 
 
+
+
+
+AnnotationsConfig::AnnotationsConfig(const AnnotationsConfig& ac)
+{
+    this->propsSet = ac.getPropsSet();
+    this->imageFileNamingRule = ac.getImageFileNamingRule();
+    this->summaryFileNamingRule = ac.getSummaryFileNamingRule();
+}
+
+
+
+string AnnotationsConfig::getAnnotatedImageFileName(const std::string& origImgPath, const std::string& origImgFileName, int frameNumber) const
+{
+    string ret = this->imageFileNamingRule;
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgPath, origImgPath);
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgFileName, origImgFileName);
+
+    // do the zero filling thing for the frame number string
+    string frameNbStr = to_string(frameNumber);
+    while (frameNbStr.length()<_AnnotationsConfig_FileNamingToken_FrameNumberZeroFillLength)
+        frameNbStr = "0" + frameNbStr;
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_FrameNumber, frameNbStr);
+
+    return ret;
+}
+
+
+string AnnotationsConfig::getSummaryFileName(const std::string& origImgPath, const std::string& origImgFileName) const
+{
+    // there should be no frame number in the summary file name..
+    string ret = this->summaryFileNamingRule;
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgPath, origImgPath);
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgFileName, origImgFileName);
+    return ret;
+}
+
+
+void AnnotationsConfig::writeContentToYaml(cv::FileStorage& fs) const
+{
+    fs << "Configuration" << "{";
+
+    fs << "ImageFilesNamingRule" << this->imageFileNamingRule;
+    fs << "SummaryFileNamingRule" << this->summaryFileNamingRule;
+
+    fs << "ClassesDefinitions" << "[";
+    for (size_t k=0; k<this->propsSet.size(); k++)
+    {
+        fs << this->propsSet[k];
+    }
+    fs << "]";
+
+    fs << "}";
+}
+
+
+
+void AnnotationsConfig::readContentFromYaml(const cv::FileNode& fnd)
+{
+    if (fnd["Configuration"].empty())
+        return;
+
+
+    FileNode currNode = fnd["Configuration"];
+
+    currNode["ImageFilesNamingRule"] >> this->imageFileNamingRule;
+    currNode["SummaryFileNamingRule"] >> this->summaryFileNamingRule;
+
+    // now reading the properties
+    this->propsSet.clear();
+
+    // grab the right filenode and start the iterator
+    FileNode nodeIt = fnd["ClassesDefinitions"];
+    FileNodeIterator it = nodeIt.begin(), it_end = nodeIt.end();
+    for (; it != it_end; ++it)
+    {
+        AnnotationsProperties props;
+        (*it) >> props;
+        this->propsSet.push_back(props);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 AnnotationsRecord::AnnotationsRecord()
 {
     // nothing to be done there, all of the vectors will be created without any help
@@ -283,11 +377,69 @@ void AnnotationsRecord::clearFrame(int frameId)
 }
 
 
+void AnnotationsRecord::clear()
+{
+    // simply clean all the vectors
+    this->record.clear();
+    this->objectsIndex.clear();
+    this->framesIndex.clear();
+}
 
 
 
+void AnnotationsRecord::writeContentToYaml(cv::FileStorage& fs) const
+{
+    fs << "AnnotationsRecord" << "[";
+    for (size_t k=0; k<this->record.size(); k++)
+    {
+        fs << this->record[k];
+    }
+    fs << "]";
+}
 
 
+void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
+{
+    // verify that there's a corresponding node into the file
+    if (fnd["AnnotationsRecord"].empty())
+        return;
+
+    // remove all data
+    this->clear();
+
+    // grab the right filenode
+    FileNode nodeIt = fnd["AnnotationsRecord"];
+
+    // start the iterator
+    FileNodeIterator it = nodeIt.begin(), it_end = nodeIt.end();
+
+    // read the data
+    int idx = 0;
+    for (; it != it_end; ++it, idx++)
+    {
+        AnnotationObject annot;
+        (*it) >> annot;
+        this->record.push_back(annot);
+
+        // filling the framesIndex matrix if needed with empty vectors
+        while((int)this->framesIndex.size()<=annot.FrameNumber)
+            this->framesIndex.push_back(vector<int>());
+
+        // recording the index into the frames record
+        this->framesIndex[annot.FrameNumber].push_back(idx);
+
+        // filling the class matrix with empty vectors if needed
+        while((int)this->objectsIndex.size()<annot.ClassId)
+            this->objectsIndex.push_back(vector< vector<int> >());
+
+        // now the corresponding objects index...
+        while((int)this->objectsIndex[annot.ClassId-1].size()<=annot.ObjectId)
+            this->objectsIndex[annot.ClassId-1].push_back(vector<int>());
+
+        // finally, storing the index into the objects record...
+        this->objectsIndex[annot.ClassId-1][annot.ObjectId].push_back(idx);
+    }
+}
 
 
 
@@ -332,15 +484,19 @@ void AnnotationsSet::setDefaultConfig()
 
     // filling some basic configuration stuff
     AnnotationsProperties prop;
-    prop.ClassName = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdRepRange=Vec3b(127, 127, 0);
+    prop.className = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdBGRRecRange=Vec3b(127, 127, 0);
     this->addClassProperty(prop);
-    prop.ClassName = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdRepRange=Vec3b(255, 0, 0); prop.maxIdRepRange=Vec3b(255, 255, 255);
+    prop.className = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 255); prop.maxIdBGRRecRange=Vec3b(3, 3, 255);
     this->addClassProperty(prop);
-    prop.ClassName = "Truck"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(170, 0, 0); prop.minIdRepRange=Vec3b(170, 0, 0); prop.maxIdRepRange=Vec3b(170, 255, 255);
+    prop.className = "Truck"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(170, 0, 0); prop.minIdBGRRecRange=Vec3b(170, 0, 0); prop.maxIdBGRRecRange=Vec3b(175, 57, 255);
     this->addClassProperty(prop);
-    prop.ClassName = "Bus"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdRepRange=Vec3b(85, 0, 0); prop.maxIdRepRange=Vec3b(85, 255, 255);
+    prop.className = "Bus"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(85, 0, 0); prop.maxIdBGRRecRange=Vec3b(85, 255, 255);
     this->addClassProperty(prop);
+
+    this->config.setImageFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png");
+    this->config.setSummaryFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml");
 }
+
 
 void AnnotationsSet::addClassProperty(const AnnotationsProperties& ap)
 {
@@ -429,11 +585,14 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
 
     // alright, we can use it
 
-    // store the filename
-    this->imageFileName = imgFileName;
+    // store the filename and path
+    std::string::size_type slashPos = imgFileName.find_last_of('/');
+    this->imageFilePath = imgFileName.substr(0, slashPos+1);
+    this->imageFileName = imgFileName.substr(slashPos+1);
 
     // first : init (back?) all the buffers
     this->currentImgIndex = 0;
+    this->maxImgReached = 0;
 
     for (size_t k=0; k<this->originalImagesBuffer.size(); k++)
     {
@@ -449,6 +608,454 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
 
     return true;
 }
+
+
+
+bool AnnotationsSet::loadOriginalVideo(const std::string& videoFileName)
+{
+    this->vidCap.release();
+
+    if (!this->vidCap.open(videoFileName))
+        return false;
+
+    Mat im;
+    if (!this->vidCap.read(im) || (!im.data))
+    {
+        this->vidCap.release();
+        return false;
+    }
+
+    this->reachedTheEndOfVideo = false;
+
+    // alright, we were able to grab the first frame
+    std::string::size_type slashPos = videoFileName.find_last_of('/');
+    this->imageFilePath = videoFileName.substr(0, slashPos+1);
+    this->imageFileName = videoFileName.substr(slashPos+1);
+
+    // init (back?) all the buffers
+    this->currentImgIndex = 0;
+    this->maxImgReached = 0;
+
+    for (size_t k=0; k<this->originalImagesBuffer.size(); k++)
+    {
+        this->originalImagesBuffer[k].release();
+        this->annotationsClassesBuffer[k].release();
+        this->annotationsIdsBuffer[k].release();
+    }
+
+    // then fill the data correctly
+    im.copyTo(this->originalImagesBuffer[0]);
+    this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
+    this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
+
+    return true;
+}
+
+
+
+bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
+{
+    /*
+    this->vidCap.release();
+
+    if (!this->vidCap.open(videoFileName))
+        return false;
+
+    Mat im;
+    if (!this->vidCap.read(im) || (!im.data))
+    {
+        this->vidCap.release();
+        return false;
+    }
+
+    this->reachedTheEndOfVideo = false;
+
+    // alright, we were able to grab the first frame
+    std::string::size_type slashPos = videoFileName.find_last_of('/');
+    this->imageFilePath = videoFileName.substr(0, slashPos+1);
+    this->imageFileName = videoFileName.substr(slashPos+1);
+
+    // init (back?) all the buffers
+    this->currentImgIndex = 0;
+    this->maxImgReached = 0;
+
+    for (size_t k=0; k<this->originalImagesBuffer.size(); k++)
+    {
+        this->originalImagesBuffer[k].release();
+        this->annotationsClassesBuffer[k].release();
+        this->annotationsIdsBuffer[k].release();
+    }
+
+    // then fill the data correctly
+    im.copyTo(this->originalImagesBuffer[0]);
+    this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
+    this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
+    */
+
+    return false;
+}
+
+
+
+
+
+
+bool AnnotationsSet::loadNextFrame()
+{
+    // save what we were doing until now
+    this->saveCurrentState();
+
+    // verify that we're indeed reading a video
+    if (!this->vidCap.isOpened())
+        return false;
+
+    // verify where we're at regarding the buffers
+    if (this->currentImgIndex == this->maxImgReached)
+    {
+        // the displayed image is the last one that was ever read
+
+        // try to load the image
+        Mat im;
+        if (!this->vidCap.read(im))
+        {
+            this->reachedTheEndOfVideo = true;
+            return false;
+        }
+
+        if (!im.data)
+            return false;
+
+        // alright, we could read the frame, now update the indexes and the buffers
+
+        // init (back?) all the buffers
+        this->currentImgIndex++;
+        this->maxImgReached++;
+
+        int bufferIndex = this->currentImgIndex % this->bufferLength;
+
+        im.copyTo(this->originalImagesBuffer[bufferIndex]);
+        this->annotationsClassesBuffer[bufferIndex] = Mat::zeros(im.size(), CV_16SC1);
+        this->annotationsIdsBuffer[bufferIndex] = Mat::zeros(im.size(), CV_32SC1);
+
+        return true;
+    }
+    else if (this->maxImgReached-this->currentImgIndex < this->bufferLength)
+    {
+        // we're inside the buffer boundaries
+        this->currentImgIndex++;
+
+        // it should be all??? quite surprised, actually....
+        return true;
+    }
+
+    // the case when we're outside of the buffer boundaries is not supported yet
+    return false;
+}
+
+
+
+
+
+bool AnnotationsSet::loadFrame(int fId)
+{
+    // save what we were doing until now
+    this->saveCurrentState();
+
+    // verify that we're indeed reading a video
+    if (!this->vidCap.isOpened())
+        return false;
+
+    if (this->maxImgReached-fId < this->bufferLength)
+    {
+        // we can load the required frame
+        this->currentImgIndex = fId;
+
+        return true;
+    }
+
+    return false;
+}
+
+
+
+
+void AnnotationsSet::closeFile(bool pleaseSave)
+{
+    if (pleaseSave)
+        this->saveCurrentState();
+
+    if (this->isVideoOpen())
+        this->vidCap.release();
+
+    for (int i=0; i<this->bufferLength; i++)
+    {
+        this->originalImagesBuffer[i].release();
+        this->annotationsClassesBuffer[i].release();
+        this->annotationsIdsBuffer[i].release();
+    }
+
+    this->annotsRecord.clear();
+
+    this->currentImgIndex = 0;
+}
+
+
+
+
+
+
+bool AnnotationsSet::isVideoOpen() const
+{
+    return this->vidCap.isOpened();
+}
+
+bool AnnotationsSet::isImageOpen() const
+{
+    // simply tell whether an image is open - an image and NOT a video
+    return (!this->vidCap.isOpened() && this->getCurrentOriginalImg().data);
+}
+
+bool AnnotationsSet::canReadNextFrame() const
+{
+    // a video must have been opened and we don't want to be at the end of the video
+    return ( this->isVideoOpen() && (this->currentImgIndex<this->maxImgReached || !this->reachedTheEndOfVideo) );
+}
+
+bool AnnotationsSet::canReadPrevFrame() const
+{
+    // a video has been opened, we don't want to be at the very beginning of the video and we don't want to be at the lowest end of the buffer
+    return (this->isVideoOpen() && (this->currentImgIndex>0) && ((this->maxImgReached-this->currentImgIndex+1)<this->bufferLength));
+}
+
+
+
+
+
+
+
+
+
+
+
+bool AnnotationsSet::saveCurrentState(const std::string& forceFileName) const
+{
+    // the place where we're going to save the current frame annotation file
+    string savingFileName = forceFileName;
+    if (savingFileName.length()<2)
+        savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->imageFileName);
+
+    // verify that we can indeed store the file where we intend to store it
+    QtCvUtils::generatePath(savingFileName);
+
+    // open the file
+    FileStorage fs(savingFileName, FileStorage::WRITE);
+
+    // add a node, since loading is way more complicated when we don't add a base node
+    fs << "AnnotationsSet" << "{";
+
+    // save the configuration
+    /*
+    void writeContentToYaml(cv::FileStorage& fs) const;
+    void readContentFromYaml(const cv::FileNode& fnd);
+    */
+    this->config.writeContentToYaml(fs);
+
+
+    // do the actual record
+    this->annotsRecord.writeContentToYaml(fs);
+
+    // close the AnnotationsSet node
+    fs << "}";
+    fs.release();
+
+    // now store the current image
+    if (!this->saveCurrentAnnotationImage())
+        return false;
+
+    /* this is some test code used to verify whether we are able to read the yaml files or not
+    FileStorage fsR("/Users/pierrelemaire/Desktop/yamltest.yaml", FileStorage::READ);
+    AnnotationsRecord localRecord;
+    localRecord.readContentFromYaml(fsR["AnnotationsSet"]);
+    fsR.release();
+    */
+
+    return true;
+}
+
+
+
+
+bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileName) const
+{
+    // the place where we're going to save the current frame annotation file
+    string savingFileName = forcedFileName;
+    if (savingFileName.length()<2)
+        savingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+
+    // find out how to associate a class and a color in the finally recorded annotation image
+    vector<Point2i> colorsIndexSrc;
+    vector<Vec3b> colorsIndexDst;
+    //unordered_map<Point2i, Vec3b> colorsIndex;
+
+    // this is the list of objects present in the image
+    vector<int> presentObjects = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
+
+    // compute the associations
+    for (size_t k=0; k<presentObjects.size(); k++)
+    {
+        AnnotationObject currentAnnotCaracs = this->annotsRecord.getAnnotationById(presentObjects[k]);
+        // the way we store each possible occurrence uniquely is with the help of a Point2i
+        Point2i objectRef(currentAnnotCaracs.ClassId, currentAnnotCaracs.ObjectId);
+
+        Vec3b currentAnnotColor;
+
+        // retrieve the annotation properties
+        AnnotationsProperties currentAnnotProps = this->config.getProperty(currentAnnotCaracs.ClassId);
+
+        // easiest case : it's an uniform class
+        if (currentAnnotProps.classType == _ACT_Uniform)
+            currentAnnotColor = currentAnnotProps.minIdBGRRecRange;
+        else if (currentAnnotProps.classType == _ACT_MultipleObjects)
+        {
+            // that's the difficult case now...
+            // for now we will make it simple
+            Vec3b minVal = currentAnnotProps.minIdBGRRecRange;
+            Vec3b maxVal = currentAnnotProps.maxIdBGRRecRange;
+
+            Vec3b availableRange = maxVal - minVal; // every byte should be positive since we assume that max >= min..!
+
+            /*
+            vector< vector<Vec3b> > encodingMultipliers;
+            vector<int> leftMostBit;
+            for (size_t i=0; i<3; i++)
+            {
+                uchar range = availableRange[i];
+                int currBitValue = 1;
+                encodingMultipliers.push_back(vector<Vec3b>());
+                leftMostBit.push_back(0);
+                while (range>=currBitValue)
+                {
+                    leftMostBit[i]++;
+                    Vec3b val(0,0,0);
+                    val[i] = currBitValue;
+                    encodingMultipliers[i].push_back(val);
+                    currBitValue*=2;
+                }
+            }
+
+            // now re-ordering the stuff
+            // int currColorIndex = 0;
+            vector<Vec3b> multipliers;
+            vector<int> components;
+
+            for (int desiredBitPosition=8; desiredBitPosition>0; desiredBitPosition--)
+            {
+                for (int idx=0; idx<3; idx++)
+                {
+                    if (leftMostBit[idx]==desiredBitPosition)
+                    {
+                        components.push_back(idx);
+                        multipliers.push_back(encodingMultipliers[idx][leftMostBit[idx]-1]);
+                        leftMostBit[idx]--;
+                    }
+                }
+            }
+            */
+
+
+            /*
+            std::cout << "multipliers content : " << std::endl;
+            for (size_t i=0; i<multipliers.size(); i++)
+            {
+                std::cout << i << ". " << multipliers[i] << std::endl;
+            }
+            std::cout << "=========" << std::endl;
+            */
+
+            /*
+            // now fill
+            Vec3b bytesContentExperiment(0,0,0);
+            int objIdRemaining = currentAnnotCaracs.ObjectId;
+            int currMultipliersInd = 0;
+            while ((objIdRemaining>0) && (currMultipliersInd<(int)multipliers.size()))
+            {
+                int currComp = components[currMultipliersInd];
+                int bitMult = objIdRemaining % 2;
+                int testVal = (int)bytesContentExperiment[currComp] + (bitMult * multipliers[currMultipliersInd][currComp]);
+                if (testVal<=availableRange[currComp])
+                {
+                    // we can record this bit
+                    bytesContentExperiment += bitMult * multipliers[currMultipliersInd];
+                    objIdRemaining /= 2;
+
+                }
+                currMultipliersInd++;
+            }
+
+            std::cout << "-------" << std::endl;
+            std::cout << "final color value for objectId " << currentAnnotCaracs.ObjectId << " of class " << currentAnnotCaracs.ClassId << " : " << bytesContentExperiment << std::endl;
+            std::cout << "=======" << std::endl;
+            */
+
+            Vec3b bytesContent;
+            int currObjIdRemaining = currentAnnotCaracs.ObjectId;
+            for (size_t i=0; i<3; i++)
+            {
+                // +1 is there because the max value is to be included
+                // anyway, x%1 == 0 and x/1 == x
+                bytesContent[i] = (uchar) currObjIdRemaining % (availableRange[i]+1);
+                currObjIdRemaining /= (availableRange[i]+1);
+            }
+
+            // fill the color
+            for (size_t i=0; i<3; i++)
+            {
+                currentAnnotColor[i] = bytesContent[i] + minVal[i];
+            }
+        }
+
+        // finally store the association
+        colorsIndexSrc.push_back(objectRef);
+        colorsIndexDst.push_back(currentAnnotColor);
+        //colorsIndex[objectRef] = currentAnnotColor;
+    }
+
+
+    // generate a new image
+    Mat imgToStore = Mat::zeros(this->getCurrentOriginalImg().size(), CV_8UC3);
+
+    for (int i=0; i<imgToStore.rows; i++)
+    {
+        for (int j=0; j<imgToStore.cols; j++)
+        {
+            // is there anything to display?
+            if (this->getCurrentAnnotationsClasses().at<int16_t>(i,j)>0)
+            {
+                // yes : find the right color
+                Point2i pointVals(this->getCurrentAnnotationsClasses().at<int16_t>(i,j), this->getCurrentAnnotationsIds().at<int32_t>(i,j));
+
+                // run through the index...
+                for (size_t k=0; k<colorsIndexSrc.size(); k++)
+                {
+                    // this is sub-optimal, but we will eventually do something better using
+                    if (pointVals == colorsIndexSrc[k])
+                    {
+                        imgToStore.at<Vec3b>(i,j) = colorsIndexDst[k];
+                        break;
+                    }
+                }
+
+                //imgToStore.at<Vec3b>(i,j) = colorsIndex[pointVals];
+            }
+        }
+    }
+
+    return QtCvUtils::imwrite(savingFileName, imgToStore);
+}
+
+
+
+
 
 
 

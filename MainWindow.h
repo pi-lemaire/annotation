@@ -79,11 +79,18 @@ protected:
 
 public slots:
     void selectAnnot(int);
+    void updateActionsAvailability();
 
 private slots:
-    void open();
-    void save();
-    //void penColor();
+    void openImage();
+    void openVideo();
+    void loadAnnotations();
+    void saveAnnotations();
+    void saveCurrentImage();
+    void closeFile();
+
+    void openConfiguration();
+
     void penWidth();
     void about();
 
@@ -93,27 +100,40 @@ private:
     bool maybeSave();
     bool saveFile(const QByteArray &fileFormat);
 
+
     AnnotateArea *annotateArea;
+    QScrollArea *annotateScrollArea;
+
     DialogClassSelection *classSelection;
     AnnotationsBrowser *annotsBrowser;
 
-    QScrollArea *annotateScrollArea;
 
-    QMenu *saveAsMenu;
+
     QMenu *fileMenu;
+    QMenu *viewMenu;
     QMenu *optionMenu;
     QMenu *helpMenu;
 
-    QAction *openAct;
-    QList<QAction *> saveAsActs;
+    QAction *openImageAct;
+    QAction *openVideoAct;
+    QAction *openAnnotationsAct;
+    QAction *closeFileAct;
+
+    QAction *configMenuAct;
+
+    QAction *saveAnnotationsAct;
+    QAction *saveCurrentImageAct;
     QAction *exitAct;
-    //QAction *penColorAct;
+
+    QAction *nextFrameAct;
+    QAction *prevFrameAct;
+
     QAction *penWidthAct;
     QAction *rubberModeAct;
     QAction *printAct;
     QAction *clearScreenAct;
     QAction *aboutAct;
-    QAction *aboutQtAct;
+    //QAction *aboutQtAct;
 
     AnnotationsSet *annotations;
 };

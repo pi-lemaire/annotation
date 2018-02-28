@@ -20,7 +20,7 @@ DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* p
         // adding a small icon for more convenience
         QPixmap classColor(30, 20);
         classColor.fill( QtCvUtils::cvVec3bToQColor(this->annots->getConfig().getProperty(iClass).displayRGBColor) );
-        pListClasses->addItem( QString::fromStdString(this->annots->getConfig().getProperty(iClass).ClassName) );
+        pListClasses->addItem( QString::fromStdString(this->annots->getConfig().getProperty(iClass).className) );
         pListClasses->item(iClass-1)->setIcon( QIcon(classColor) );
     }
 
