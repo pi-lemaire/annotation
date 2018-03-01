@@ -398,6 +398,7 @@ void AnnotationsRecord::writeContentToYaml(cv::FileStorage& fs) const
 }
 
 
+
 void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
 {
     // verify that there's a corresponding node into the file
@@ -606,6 +607,10 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
     this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
     this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
 
+    // try to load a previously recorded annotation, if it exists
+    if (this->loadCurrentAnnotationImage())
+        cout << "we were able to load a previous annotation" << endl;
+
     return true;
 }
 
@@ -647,6 +652,10 @@ bool AnnotationsSet::loadOriginalVideo(const std::string& videoFileName)
     im.copyTo(this->originalImagesBuffer[0]);
     this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
     this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
+
+    // try to load a previously recorded annotation, if it exists
+    if (this->loadCurrentAnnotationImage())
+        cout << "we were able to load a previous annotation" << endl;
 
     return true;
 }
@@ -736,6 +745,10 @@ bool AnnotationsSet::loadNextFrame()
         im.copyTo(this->originalImagesBuffer[bufferIndex]);
         this->annotationsClassesBuffer[bufferIndex] = Mat::zeros(im.size(), CV_16SC1);
         this->annotationsIdsBuffer[bufferIndex] = Mat::zeros(im.size(), CV_32SC1);
+
+        // try to load a previously recorded annotation, if it exists
+        if (this->loadCurrentAnnotationImage())
+            cout << "we were able to load a previous annotation" << endl;
 
         return true;
     }
@@ -1053,6 +1066,154 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
     return QtCvUtils::imwrite(savingFileName, imgToStore);
 }
 
+
+
+
+
+
+bool AnnotationsSet::loadCurrentAnnotationImage()
+{
+    // loads an already annotated image. Starts with the idea that both the class and the objectId matrices were already filled with 0s
+
+    // the place where we're going to save the current frame annotation file
+    string loadingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+
+
+
+    // try to load the image, the color format is mandatory
+    Mat imLoad = imread(loadingFileName, CV_LOAD_IMAGE_COLOR);
+
+    if (!imLoad.data)
+        return false;
+
+    // verify that the dimensions are compliant with our data format
+    if (imLoad.size() != this->getCurrentAnnotationsClasses().size())
+        return false;
+
+    // record the minColorIndex and the maxColorIndex, it is faster
+    vector<Vec3b> minColorIndex, maxColorIndex;
+    vector<Vec3i> multipliersIndex;
+    vector<bool> classUniform;
+
+    for (int i=0; i<this->config.getPropsNumber(); i++)
+    {
+        classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
+
+        minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
+
+        // warning : there's an exception when the class is uniform
+        if (classUniform[i])
+            maxColorIndex.push_back(minColorIndex[i]);
+        else
+            maxColorIndex.push_back(this->config.getProperty(i+1).maxIdBGRRecRange);
+
+        // already calculate the multipliers
+        multipliersIndex.push_back( Vec3i(1, (maxColorIndex[i][0]-minColorIndex[i][0]+1), (maxColorIndex[i][0]-minColorIndex[i][0]+1)*(maxColorIndex[i][1]-minColorIndex[i][1]+1)) );
+    }
+
+
+
+    // we also want to feed the record data, in case it's not compliant with what's recorded
+
+    // so we're recording what we're observing
+    vector<Point2i> observedObjectsList;
+    vector<Rect2i> observedObjectsBBs;
+
+
+    // read the image content...
+    for (int i=0; i<imLoad.rows; i++)
+    {
+        for (int j=0; j<imLoad.cols; j++)
+        {
+            Vec3b pxValue = imLoad.at<Vec3b>(i,j);
+
+            if (pxValue != Vec3b(0,0,0))    // there is something there..
+            {
+                Point2i currPointIds(0,0);
+
+                for (int k=0; k<(int)minColorIndex.size(); k++)
+                {
+                    if ( (pxValue[0]>=minColorIndex[k][0]) && (pxValue[1]>=minColorIndex[k][1]) && (pxValue[2]>=minColorIndex[k][2])
+                         && (pxValue[0]<=maxColorIndex[k][0]) && (pxValue[1]<=maxColorIndex[k][1]) && (pxValue[2]<=maxColorIndex[k][2]) )
+                    {
+                        // we belong to this class
+                        this->accessCurrentAnnotationsClasses().at<int16_t>(i,j) = k+1;
+
+                        currPointIds.x = k+1;
+
+                        // if the class uniform, we don't need to do anything else
+                        // if not, however, we need to decode the pixels information
+                        if (!classUniform[k])
+                        {
+                            // this is just a matter of multiplication, nothing fancy here
+                            int objInd = (multipliersIndex[k][0] * (pxValue[0]-minColorIndex[k][0]))
+                                       + (multipliersIndex[k][1] * (pxValue[1]-minColorIndex[k][1]))
+                                       + (multipliersIndex[k][2] * (pxValue[2]-minColorIndex[k][2]));
+
+                            this->accessCurrentAnnotationsIds().at<int32_t>(i,j) = objInd;
+                            currPointIds.y = objInd;
+                        }
+
+                        // there's no need to go any further, we know already the right class and object id
+                        break;
+                    }
+                }
+
+
+                if (currPointIds == Point2i(0,0))
+                    std::cout << "something fishy happened there" << std::endl;
+
+
+                // storing the object and/or updating the bounding box
+                size_t k = 0;
+                for (k=0; k<observedObjectsList.size(); k++)
+                {
+                    if (observedObjectsList[k] == currPointIds)
+                    {
+                        // we've already recorded this point, we just update the bounding box
+                        observedObjectsBBs[k] |= Rect2i(Point2i(j,i), Size2i(1,1));
+                        break;
+                    }
+                }
+
+                // if the object hasn't been observed yet...
+                if (k==observedObjectsList.size())
+                {
+                    // we add the new object
+                    observedObjectsList.push_back(currPointIds);
+                    observedObjectsBBs.push_back( Rect2i(Point2i(j,i), Size2i(1,1)) );
+                }
+
+            }
+        }
+    }
+
+    // now checking and/or updating the compliance with the annotations record
+    for (size_t k=0; k<observedObjectsList.size(); k++)
+    {
+        // search the object within the record
+        int recordedInd = this->annotsRecord.searchAnnotation(this->currentImgIndex, observedObjectsList[k].x, observedObjectsList[k].y);
+
+        if (recordedInd == -1)
+        {
+            // couldn't find it - create it, then
+            AnnotationObject annObj;
+            annObj.FrameNumber = this->currentImgIndex;
+            annObj.ClassId = observedObjectsList[k].x;
+            annObj.ObjectId = observedObjectsList[k].y;
+            annObj.BoundingBox = observedObjectsBBs[k];
+            this->annotsRecord.addNewAnnotation(annObj);
+        }
+        else
+        {
+            // update the bounding boxes - probably useless, but sin'ce we've gone this far anyway...
+            this->annotsRecord.updateBoundingBox(recordedInd, observedObjectsBBs[k]);
+        }
+    }
+
+
+    return true;
+}
 
 
 

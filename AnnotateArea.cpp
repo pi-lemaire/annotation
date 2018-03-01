@@ -106,6 +106,10 @@ bool AnnotateArea::openVideo(const QString &fileName)
 
     this->reload();
 
+    this->updatePaintImage();
+
+    this->selectAnnotation(-1);
+
     return true;
 }
 

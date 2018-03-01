@@ -224,6 +224,13 @@ static void read(const cv::FileNode& node, AnnotationObject& x, const Annotation
 
 
 
+
+
+
+
+
+
+
 // this is the class that handles the indexing of all of the annotation objects
 
 class AnnotationsRecord
@@ -328,6 +335,9 @@ public:
 
 
     bool saveCurrentAnnotationImage(const std::string& forcedFileName="") const;
+    bool loadCurrentAnnotationImage();
+
+
 
     bool saveCurrentState(const std::string& forceFileName="") const;
 
