@@ -73,7 +73,7 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent)
     setAttribute(Qt::WA_StaticContents);
 
     // initialization stuff...
-    this->modified = false;
+    //this->modified = false;
     this->scribbling = false;
     this->rubberMode = false;
 
@@ -116,17 +116,24 @@ bool AnnotateArea::openVideo(const QString &fileName)
 
 bool AnnotateArea::openAnnotations(const QString &fileName)
 {
+    // first close the current action
+    // this->annotations->closeFile();
+
     // load the annotation into the system
     if (!this->annotations->loadAnnotations(fileName.toStdString()))
         return false;
 
     this->reload();
 
+    this->updatePaintImage();
+
+    this->selectAnnotation(-1);
+
     return true;
 }
 
 
-bool AnnotateArea::saveImage(const QString &fileName, const char *fileFormat)
+bool AnnotateArea::saveImage(const QString &fileName)
 {
     /*
     QImage visibleImage = this->BackgroundImage;
@@ -166,22 +173,6 @@ void AnnotateArea::setPenWidth(int newWidth)
 }
 
 
-void AnnotateArea::displayFrame(int id)
-{
-    if (this->annotations->loadFrame(id))
-    {
-        this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
-
-        this->updatePaintImage();
-
-        this->selectAnnotation(-1);
-
-        // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
-
-        update();
-    }
-}
-
 
 void AnnotateArea::reload()
 {
@@ -201,7 +192,7 @@ void AnnotateArea::reload()
     // this->selectedClass = 0;
 
     // prepare for the annotation stuff, and display the result
-    this->modified = false;
+    //this->modified = false;
     update();
 }
 
@@ -232,11 +223,32 @@ void AnnotateArea::displayPrevFrame()
 }
 
 
+bool AnnotateArea::displayFrame(int id)
+{
+    if (this->annotations->loadFrame(id))
+    {
+        this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
+
+        this->updatePaintImage();
+
+        this->selectAnnotation(-1);
+
+        // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
+
+        update();
+
+        return true;
+    }
+
+    return false;
+}
+
+
 
 void AnnotateArea::clearImage()
 {
     this->PaintingImage.fill(qRgba(255, 255, 255, 0));
-    this->modified = true;
+    //this->modified = true;
     // updateContent();
     this->update();
 }
@@ -524,7 +536,7 @@ void AnnotateArea::drawLineTo(const QPoint &endPoint)
         painter.drawPoint(this->lastPoint);
         objectPainter.drawPoint(this->lastPoint);
     }
-    this->modified = true;
+    //this->modified = true;
 
     this->ObjectROI |= QRect(endPoint, endPoint);
 

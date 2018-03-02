@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QColor>
 #include <QDebug>
+#include <QDateTime>
 #include <QDir>
 
 
@@ -133,6 +134,10 @@ namespace QtCvUtils
        QDir().mkpath(QFileInfo(filePath).absolutePath());
    }
 
+   inline std::string getDateTimeStr()
+   {
+       return QDateTime::currentDateTime().toString(Qt::ISODate).toStdString();
+   }
 }
 
 

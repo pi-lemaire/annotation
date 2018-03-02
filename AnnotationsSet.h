@@ -8,7 +8,8 @@
 #include <vector>
 #include "QtCvUtils.h"
 
-
+#include <algorithm>
+#include <numeric>
 
 
 
@@ -40,6 +41,21 @@ namespace AnnotationUtilities
             pos += replace.length();
         }
     }
+
+    //inline bool comparePoints(const cv::Point2i& p1, const cv::Point2i& p2) { return ((p1.x<p2.x) || (p1.x==p2.x && p1.y<p2.y)); }
+
+    inline std::vector<size_t> sortP2iIndexes(const std::vector<cv::Point2i> &v)
+    {
+        // initialize original index locations
+        std::vector<size_t> idx(v.size());
+        std::iota(idx.begin(), idx.end(), 0);
+
+        // sort indexes based on comparing values in v
+        sort( idx.begin(), idx.end(),
+             [&v](size_t i1, size_t i2) {return ((v[i1].x<v[i2].x) || (v[i1].x==v[i2].x && v[i1].y<v[i2].y));} );
+
+        return idx;
+    }
 }
 
 
@@ -54,7 +70,16 @@ namespace AnnotationUtilities
 
 
 
-enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects};
+enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects };
+
+
+
+const std::string _AnnotProp_YAMLKey_ClassName  = "Name";
+const std::string _AnnotProp_YAMLKey_ClassType  = "Type";
+const std::string _AnnotProp_YAMLKey_DispRGBCol = "DispColRGB";
+const std::string _AnnotProp_YAMLKey_RecBGRMin  = "IdRecRangeMinBGR";
+const std::string _AnnotProp_YAMLKey_RecBGRMax  = "IdRecRangeMaxBGR";
+
 
 
 class AnnotationsProperties
@@ -76,23 +101,23 @@ public:
     void write(cv::FileStorage& fs) const
     {
         fs << "{:";
-        fs << "Name" << this->className;
-        fs << "Type" << (int)this->classType;
-        fs << "DispColRGB" << this->displayRGBColor;
-        fs << "IdRecRangeMinBGR" << this->minIdBGRRecRange;
-        fs << "IdRecRangeMaxBGR" << this->maxIdBGRRecRange;
+        fs << _AnnotProp_YAMLKey_ClassName  << this->className;
+        fs << _AnnotProp_YAMLKey_ClassType  << (int)this->classType;
+        fs << _AnnotProp_YAMLKey_DispRGBCol << this->displayRGBColor;
+        fs << _AnnotProp_YAMLKey_RecBGRMin  << this->minIdBGRRecRange;
+        fs << _AnnotProp_YAMLKey_RecBGRMax  << this->maxIdBGRRecRange;
         fs << "}";
     }
 
     void read(const cv::FileNode& node)
     {
-        node["Name"] >> this->className;
+        node[_AnnotProp_YAMLKey_ClassName]  >> this->className;
         int typeInt;
-        node["Type"] >> typeInt;
-        this->classType = (typeInt==_ACT_Uniform? _ACT_Uniform : _ACT_MultipleObjects);
-        node["DispColRGB"] >> this->displayRGBColor;
-        node["IdRecRangeMinBGR"] >> this->minIdBGRRecRange;
-        node["IdRecRangeMaxBGR"] >> this->maxIdBGRRecRange;
+        node[_AnnotProp_YAMLKey_ClassType]  >> typeInt;
+        this->classType = static_cast<AnnotationClassType>(typeInt);
+        node[_AnnotProp_YAMLKey_DispRGBCol] >> this->displayRGBColor;
+        node[_AnnotProp_YAMLKey_RecBGRMin]  >> this->minIdBGRRecRange;
+        node[_AnnotProp_YAMLKey_RecBGRMax]  >> this->maxIdBGRRecRange;
     }
 
     //int ClassId;
@@ -106,18 +131,13 @@ public:
 };
 
 
-static void write(cv::FileStorage& fs, const std::string&, const AnnotationsProperties& x)
-{
-    x.write(fs);
-}
 
-static void read(const cv::FileNode& node, AnnotationsProperties& x, const AnnotationsProperties& default_value = AnnotationsProperties())
-{
-    if (node.empty())
-        x = default_value;
-    else
-        x.read(node);
-}
+
+// the following declarations are necessary to the FileStorage stuff, but they are declared in the .cpp source file
+// static void write(cv::FileStorage& fs, const std::string&, const AnnotationsProperties& x);
+// static void read(const cv::FileNode& node, AnnotationsProperties& x, const AnnotationsProperties& default_value = AnnotationsProperties())
+
+
 
 
 
@@ -133,6 +153,12 @@ const std::string _AnnotationsConfig_FileNamingToken_OrigImgPath = "%OrImPa%";
 const std::string _AnnotationsConfig_FileNamingToken_OrigImgFileName = "%OrImFiNa%";
 const std::string _AnnotationsConfig_FileNamingToken_FrameNumber = "%FrNu%";
 const int _AnnotationsConfig_FileNamingToken_FrameNumberZeroFillLength = 6;
+
+
+const std::string _AnnotsConfig_YAMLKey_Node  = "Configuration";
+const std::string _AnnotsConfig_YAMLKey_ClassesDefs_Node  = "ClassesDefinitions";
+const std::string _AnnotsConfig_YAMLKey_ImageFileNamingRule  = "ImageFilesNamingRule";
+const std::string _AnnotsConfig_YAMLKey_SummaryFileNamingRule  = "SummaryFileNamingRule";
 
 
 class AnnotationsConfig
@@ -183,6 +209,15 @@ private:
 // however, managing such data is complex, since it introduces redundancy... it forces us to maintain consistency throughout the database,
 // which can be sometimes rather complex...
 
+
+
+const std::string _AnnotObj_YAMLKey_Class = "Cl";
+const std::string _AnnotObj_YAMLKey_ObjId = "Ob";
+const std::string _AnnotObj_YAMLKey_Frame = "Fr";
+const std::string _AnnotObj_YAMLKey_BBox  = "BB";
+
+
+
 class AnnotationObject
 {
 public:
@@ -192,15 +227,18 @@ public:
 
     void write(cv::FileStorage& fs) const
     {
-        fs << "{:" << "C" << this->ClassId << "O" << this->ObjectId << "F" << this->FrameNumber << "B" << this->BoundingBox << "}";
+        fs << "{:" << _AnnotObj_YAMLKey_Class << this->ClassId
+                   << _AnnotObj_YAMLKey_ObjId << this->ObjectId
+                   << _AnnotObj_YAMLKey_Frame << this->FrameNumber
+                   << _AnnotObj_YAMLKey_BBox  << this->BoundingBox << "}";
     }
 
     void read(const cv::FileNode& node)
     {
-        this->ClassId = (int)node["C"];
-        this->ObjectId = (int)node["O"];
-        this->FrameNumber = (int)node["F"];
-        node["B"] >> this->BoundingBox;
+        node[_AnnotObj_YAMLKey_Class] >> this->ClassId;
+        node[_AnnotObj_YAMLKey_ObjId] >> this->ObjectId;
+        node[_AnnotObj_YAMLKey_Frame] >> this->FrameNumber;
+        node[_AnnotObj_YAMLKey_BBox]  >> this->BoundingBox;
     }
 
     int ClassId;
@@ -209,18 +247,10 @@ public:
     cv::Rect2i BoundingBox;
 };
 
-static void write(cv::FileStorage& fs, const std::string&, const AnnotationObject& x)
-{
-    x.write(fs);
-}
 
-static void read(const cv::FileNode& node, AnnotationObject& x, const AnnotationObject& default_value = AnnotationObject())
-{
-    if (node.empty())
-        x = default_value;
-    else
-        x.read(node);
-}
+// same as above regarding the FileStorage declarations stuff
+// static void write(cv::FileStorage& fs, const std::string&, const AnnotationObject& x)
+// static void read(const cv::FileNode& node, AnnotationObject& x, const AnnotationObject& default_value = AnnotationObject())
 
 
 
@@ -232,6 +262,11 @@ static void read(const cv::FileNode& node, AnnotationObject& x, const Annotation
 
 
 // this is the class that handles the indexing of all of the annotation objects
+
+
+const std::string _AnnotsRecord_YAMLKey_Node  = "AnnotationsRecord";
+
+
 
 class AnnotationsRecord
 {
@@ -286,6 +321,20 @@ const int _AnnotationsSet_default_bufferLength = 16;
 const int _AnnotationsSet_default_classNoneValue = 0;
 
 
+
+
+
+const std::string _AnnotationsSet_YAMLKey_Node  = "AnnotationsSet";
+const std::string _AnnotationsSet_YAMLKey_FilePath  = "FilePath";
+const std::string _AnnotationsSet_YAMLKey_ImageFileName  = "ImageFileName";
+const std::string _AnnotationsSet_YAMLKey_VideoFileName  = "VideoFileName";
+const std::string _AnnotationsSet_YAMLKey_RecordingTimeDate  = "RecordingTimeDate";
+
+
+
+
+
+
 class AnnotationsSet
 {
 public:
@@ -320,7 +369,6 @@ public:
     bool loadNextFrame();
     bool loadFrame(int fId);
 
-    void closeFile(bool pleaseSave=false);
 
 
     bool isVideoOpen() const;
@@ -331,15 +379,24 @@ public:
     bool canReadPrevFrame() const;
 
 
-
-
-
-    bool saveCurrentAnnotationImage(const std::string& forcedFileName="") const;
     bool loadCurrentAnnotationImage();
+    bool saveCurrentAnnotationImage(const std::string& forcedFileName="") const;
+
+
+    void closeFile(bool pleaseSave=false);
+
+    // save the yaml file and the image file. forceFilename concerns the yaml file.
+    // The boolean prevents the software from saving systematically even if no changes were done
+    bool saveCurrentState(const std::string& forceFileName="", bool saveOnlyIfNecessary=false);
+
+
+    bool thereWereChangesPerformedUponCurrentAnnot() const { return this->changesPerformedUponCurrentAnnot; }
 
 
 
-    bool saveCurrentState(const std::string& forceFileName="") const;
+    std::string getDefaultAnnotationsSaveFileName() const;
+    std::string getDefaultCurrentImageSaveFileName() const;
+
 
 
 
@@ -355,10 +412,12 @@ public:
 
 
     const AnnotationsConfig& getConfig() const { return this->config; }
+    AnnotationsConfig& accessConfig() { return this->config; }
     const AnnotationsRecord& getRecord() const { return this->annotsRecord; }
     // AnnotationsConfig& accessConfig() { return this->config; }  // non-const accessor version, should be used only very occasionnally..
 
-    void addClassProperty(const AnnotationsProperties& ap);
+
+    // void addClassProperty(const AnnotationsProperties& ap);
 
 
 
@@ -372,9 +431,10 @@ private:
 
 
 
-
+    // used within the class to make easier the modification of both matrices
     cv::Mat& accessCurrentAnnotationsClasses();
     cv::Mat& accessCurrentAnnotationsIds();
+
 
 
     // this set of vectors stores the original images as well as their corresponding annotations.
@@ -388,10 +448,13 @@ private:
     int maxImgReached;
     bool reachedTheEndOfVideo;
 
+    // records whether some changes were done on the current annotation
+    bool changesPerformedUponCurrentAnnot;
+
     // those buffers will be assigned dynamically, in case we need to change their length
     int bufferLength;
 
-    // store the configuration locally. I'm not sure about what we should do if it is modified during the execution
+    // store the configuration locally. It is not supposed to be modified once the annotation is launched
     AnnotationsConfig config;
 
     // store the record - kind of a way of indexing annotations into the system
@@ -404,8 +467,9 @@ private:
     cv::VideoCapture vidCap;
 
 
-    // store the image/video loaded
+    // store the image/video/annotation loaded
     std::string imageFileName;
+    std::string videoFileName;
     std::string imageFilePath;
 };
 

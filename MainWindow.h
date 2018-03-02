@@ -85,7 +85,8 @@ private slots:
     void openImage();
     void openVideo();
     void loadAnnotations();
-    void saveAnnotations();
+    void saveAnnotationsAs();
+    void save();
     void saveCurrentImage();
     void closeFile();
 
@@ -121,6 +122,7 @@ private:
 
     QAction *configMenuAct;
 
+    QAction *saveAct;
     QAction *saveAnnotationsAct;
     QAction *saveCurrentImageAct;
     QAction *exitAct;

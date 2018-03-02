@@ -83,17 +83,17 @@ public:
     bool openImage(const QString &fileName);
     bool openVideo(const QString &fileName);
     bool openAnnotations(const QString &fileName);
-    bool saveImage(const QString &fileName, const char *fileFormat);
+    bool saveImage(const QString &fileName);
     // void setPenColor(const QColor &newColor);
     void setPenWidth(int newWidth);
 
 
     //void displayNextFrame();
-    void displayFrame(int id);
+    bool displayFrame(int id);
     void reload();
 
 
-    bool isModified() const { return modified; }
+    bool isModified() const { return this->annotations->thereWereChangesPerformedUponCurrentAnnot(); }
     QColor penColor() const { return myPenColor; }
     int penWidth() const { return myPenWidth; }
 
@@ -129,7 +129,7 @@ private:
     void updatePaintImage(const QRect& ROI=QRect(-3, -3, 0, 0));
 
 
-    bool modified;
+    // bool modified;
     bool scribbling, rubberMode;
     int myPenWidth;
     QColor myPenColor;

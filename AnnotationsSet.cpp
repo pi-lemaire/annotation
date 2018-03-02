@@ -15,6 +15,48 @@ using namespace cv;
 
 
 
+// FileStorage stuff, required for the iterators, declared here in order to avoid multiple declarations and warnings in the .h file
+// -- they shall be used only in the .cpp file anyway
+
+static void write(cv::FileStorage& fs, const std::string&, const AnnotationsProperties& x)
+{
+    x.write(fs);
+}
+
+static void read(const cv::FileNode& node, AnnotationsProperties& x, const AnnotationsProperties& default_value = AnnotationsProperties())
+{
+    if (node.empty())
+        x = default_value;
+    else
+        x.read(node);
+}
+
+
+static void write(cv::FileStorage& fs, const std::string&, const AnnotationObject& x)
+{
+    x.write(fs);
+}
+
+static void read(const cv::FileNode& node, AnnotationObject& x, const AnnotationObject& default_value = AnnotationObject())
+{
+    if (node.empty())
+        x = default_value;
+    else
+        x.read(node);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -56,12 +98,12 @@ string AnnotationsConfig::getSummaryFileName(const std::string& origImgPath, con
 
 void AnnotationsConfig::writeContentToYaml(cv::FileStorage& fs) const
 {
-    fs << "Configuration" << "{";
+    fs << _AnnotsConfig_YAMLKey_Node << "{";
 
-    fs << "ImageFilesNamingRule" << this->imageFileNamingRule;
-    fs << "SummaryFileNamingRule" << this->summaryFileNamingRule;
+    fs << _AnnotsConfig_YAMLKey_ImageFileNamingRule << this->imageFileNamingRule;
+    fs << _AnnotsConfig_YAMLKey_SummaryFileNamingRule << this->summaryFileNamingRule;
 
-    fs << "ClassesDefinitions" << "[";
+    fs << _AnnotsConfig_YAMLKey_ClassesDefs_Node << "[";
     for (size_t k=0; k<this->propsSet.size(); k++)
     {
         fs << this->propsSet[k];
@@ -75,20 +117,20 @@ void AnnotationsConfig::writeContentToYaml(cv::FileStorage& fs) const
 
 void AnnotationsConfig::readContentFromYaml(const cv::FileNode& fnd)
 {
-    if (fnd["Configuration"].empty())
+    if (fnd[_AnnotsConfig_YAMLKey_Node].empty())
         return;
 
 
-    FileNode currNode = fnd["Configuration"];
+    FileNode currNode = fnd[_AnnotsConfig_YAMLKey_Node];
 
-    currNode["ImageFilesNamingRule"] >> this->imageFileNamingRule;
-    currNode["SummaryFileNamingRule"] >> this->summaryFileNamingRule;
+    currNode[_AnnotsConfig_YAMLKey_ImageFileNamingRule] >> this->imageFileNamingRule;
+    currNode[_AnnotsConfig_YAMLKey_SummaryFileNamingRule] >> this->summaryFileNamingRule;
 
     // now reading the properties
     this->propsSet.clear();
 
     // grab the right filenode and start the iterator
-    FileNode nodeIt = fnd["ClassesDefinitions"];
+    FileNode nodeIt = currNode[_AnnotsConfig_YAMLKey_ClassesDefs_Node];
     FileNodeIterator it = nodeIt.begin(), it_end = nodeIt.end();
     for (; it != it_end; ++it)
     {
@@ -389,7 +431,7 @@ void AnnotationsRecord::clear()
 
 void AnnotationsRecord::writeContentToYaml(cv::FileStorage& fs) const
 {
-    fs << "AnnotationsRecord" << "[";
+    fs << _AnnotsRecord_YAMLKey_Node << "[";
     for (size_t k=0; k<this->record.size(); k++)
     {
         fs << this->record[k];
@@ -402,14 +444,14 @@ void AnnotationsRecord::writeContentToYaml(cv::FileStorage& fs) const
 void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
 {
     // verify that there's a corresponding node into the file
-    if (fnd["AnnotationsRecord"].empty())
+    if (fnd[_AnnotsRecord_YAMLKey_Node].empty())
         return;
 
     // remove all data
     this->clear();
 
     // grab the right filenode
-    FileNode nodeIt = fnd["AnnotationsRecord"];
+    FileNode nodeIt = fnd[_AnnotsRecord_YAMLKey_Node];
 
     // start the iterator
     FileNodeIterator it = nodeIt.begin(), it_end = nodeIt.end();
@@ -420,6 +462,10 @@ void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
     {
         AnnotationObject annot;
         (*it) >> annot;
+
+        if (annot.ClassId==0)   // that should be impossible?
+            continue;
+
         this->record.push_back(annot);
 
         // filling the framesIndex matrix if needed with empty vectors
@@ -477,6 +523,7 @@ void AnnotationsSet::setDefaultConfig()
     // setting up the usual stuff...
     this->currentImgIndex = 0;
     this->bufferLength = _AnnotationsSet_default_bufferLength;
+    this->changesPerformedUponCurrentAnnot = false;
 
     // initialization of the buffer
     this->originalImagesBuffer = vector<Mat>(this->bufferLength, Mat());
@@ -486,27 +533,26 @@ void AnnotationsSet::setDefaultConfig()
     // filling some basic configuration stuff
     AnnotationsProperties prop;
     prop.className = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdBGRRecRange=Vec3b(127, 127, 0);
-    this->addClassProperty(prop);
+    this->config.addProperty(prop);
     prop.className = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 255); prop.maxIdBGRRecRange=Vec3b(3, 3, 255);
-    this->addClassProperty(prop);
+    this->config.addProperty(prop);
     prop.className = "Truck"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(170, 0, 0); prop.minIdBGRRecRange=Vec3b(170, 0, 0); prop.maxIdBGRRecRange=Vec3b(175, 57, 255);
-    this->addClassProperty(prop);
+    this->config.addProperty(prop);
     prop.className = "Bus"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(85, 0, 0); prop.maxIdBGRRecRange=Vec3b(85, 255, 255);
-    this->addClassProperty(prop);
+    this->config.addProperty(prop);
 
     this->config.setImageFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png");
     this->config.setSummaryFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml");
 }
 
 
+/*
 void AnnotationsSet::addClassProperty(const AnnotationsProperties& ap)
 {
     // ad the class property - pretty simple
     this->config.addProperty(ap);
-
-    // don't forget to get the firstKnownAvailableObjectId vector right
-    //this->firstKnownAvailableObjectId.push_back(0);
 }
+*/
 
 
 
@@ -590,6 +636,7 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
     std::string::size_type slashPos = imgFileName.find_last_of('/');
     this->imageFilePath = imgFileName.substr(0, slashPos+1);
     this->imageFileName = imgFileName.substr(slashPos+1);
+    this->videoFileName = "";
 
     // first : init (back?) all the buffers
     this->currentImgIndex = 0;
@@ -610,6 +657,9 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
     // try to load a previously recorded annotation, if it exists
     if (this->loadCurrentAnnotationImage())
         cout << "we were able to load a previous annotation" << endl;
+
+    // we have loaded a new frame - specify that nothing's changed
+    this->changesPerformedUponCurrentAnnot = false;
 
     return true;
 }
@@ -635,7 +685,8 @@ bool AnnotationsSet::loadOriginalVideo(const std::string& videoFileName)
     // alright, we were able to grab the first frame
     std::string::size_type slashPos = videoFileName.find_last_of('/');
     this->imageFilePath = videoFileName.substr(0, slashPos+1);
-    this->imageFileName = videoFileName.substr(slashPos+1);
+    this->videoFileName = videoFileName.substr(slashPos+1);
+    this->imageFileName = "";
 
     // init (back?) all the buffers
     this->currentImgIndex = 0;
@@ -657,52 +708,12 @@ bool AnnotationsSet::loadOriginalVideo(const std::string& videoFileName)
     if (this->loadCurrentAnnotationImage())
         cout << "we were able to load a previous annotation" << endl;
 
+    // we have loaded a new frame - specify that nothing's changed
+    this->changesPerformedUponCurrentAnnot = false;
+
     return true;
 }
 
-
-
-bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
-{
-    /*
-    this->vidCap.release();
-
-    if (!this->vidCap.open(videoFileName))
-        return false;
-
-    Mat im;
-    if (!this->vidCap.read(im) || (!im.data))
-    {
-        this->vidCap.release();
-        return false;
-    }
-
-    this->reachedTheEndOfVideo = false;
-
-    // alright, we were able to grab the first frame
-    std::string::size_type slashPos = videoFileName.find_last_of('/');
-    this->imageFilePath = videoFileName.substr(0, slashPos+1);
-    this->imageFileName = videoFileName.substr(slashPos+1);
-
-    // init (back?) all the buffers
-    this->currentImgIndex = 0;
-    this->maxImgReached = 0;
-
-    for (size_t k=0; k<this->originalImagesBuffer.size(); k++)
-    {
-        this->originalImagesBuffer[k].release();
-        this->annotationsClassesBuffer[k].release();
-        this->annotationsIdsBuffer[k].release();
-    }
-
-    // then fill the data correctly
-    im.copyTo(this->originalImagesBuffer[0]);
-    this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
-    this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
-    */
-
-    return false;
-}
 
 
 
@@ -712,14 +723,14 @@ bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
 bool AnnotationsSet::loadNextFrame()
 {
     // save what we were doing until now
-    this->saveCurrentState();
+    this->saveCurrentState("", true);
 
     // verify that we're indeed reading a video
     if (!this->vidCap.isOpened())
         return false;
 
     // verify where we're at regarding the buffers
-    if (this->currentImgIndex == this->maxImgReached)
+    if (this->currentImgIndex >= this->maxImgReached)
     {
         // the displayed image is the last one that was ever read
 
@@ -738,7 +749,7 @@ bool AnnotationsSet::loadNextFrame()
 
         // init (back?) all the buffers
         this->currentImgIndex++;
-        this->maxImgReached++;
+        this->maxImgReached = this->currentImgIndex;
 
         int bufferIndex = this->currentImgIndex % this->bufferLength;
 
@@ -750,12 +761,18 @@ bool AnnotationsSet::loadNextFrame()
         if (this->loadCurrentAnnotationImage())
             cout << "we were able to load a previous annotation" << endl;
 
+        // we have loaded a new frame - specify that nothing's changed
+        this->changesPerformedUponCurrentAnnot = false;
+
         return true;
     }
     else if (this->maxImgReached-this->currentImgIndex < this->bufferLength)
     {
         // we're inside the buffer boundaries
         this->currentImgIndex++;
+
+        // we have loaded a new frame - specify that nothing's changed
+        this->changesPerformedUponCurrentAnnot = false;
 
         // it should be all??? quite surprised, actually....
         return true;
@@ -772,16 +789,73 @@ bool AnnotationsSet::loadNextFrame()
 bool AnnotationsSet::loadFrame(int fId)
 {
     // save what we were doing until now
-    this->saveCurrentState();
+    this->saveCurrentState("", true);
 
     // verify that we're indeed reading a video
     if (!this->vidCap.isOpened())
         return false;
 
-    if (this->maxImgReached-fId < this->bufferLength)
+    if (fId<0)  // shouldn't happen, but we better stay safe
+        return false;
+
+    // is this a previous frame?
+    if ((fId<=this->currentImgIndex) && (this->maxImgReached-fId < this->bufferLength))
     {
         // we can load the required frame
         this->currentImgIndex = fId;
+
+        // we have loaded a new frame - specify that nothing's changed
+        this->changesPerformedUponCurrentAnnot = false;
+
+        return true;
+    }
+    else if (fId>this->currentImgIndex)
+    {
+        // trying to read forward the video
+        // we only read frames and we don't compute anything if we're out of the buffer boundaries
+        Mat imThrash;
+        for (; this->currentImgIndex<fId-this->bufferLength; this->currentImgIndex++)
+            if (!this->vidCap.read(imThrash))
+                return false;
+
+        while (!this->reachedTheEndOfVideo && fId>this->currentImgIndex)
+        {
+            if (!this->loadNextFrame())  // we load every frame normally because we need to update the buffer
+                return false;
+        }
+
+        if (fId == this->currentImgIndex)
+        {
+            // we have loaded a new frame - specify that nothing's changed
+            this->changesPerformedUponCurrentAnnot = false;
+
+            return true;
+        }
+    }
+    else
+    {
+        // last case : we're out of the buffer and it isn't a case where we're supposed to read forward - which means that we want to frames before the buffer
+
+        // i've witnessed a lot of situations where the frames set counter isn't working properly...
+        // so i'm doing it "the hardcore way" : loading the video back and reading all the frames until i reach the buffer again
+        if (!this->loadOriginalVideo(this->imageFilePath + this->videoFileName))
+            return false;
+
+        // read the video until we rich the start of the buffer again
+        Mat imThrash;
+        for (; this->currentImgIndex<fId-this->bufferLength; this->currentImgIndex++)
+            if (!this->vidCap.read(imThrash))
+                return false;
+
+        // finally read and fill the buffers correctly
+        while (!this->reachedTheEndOfVideo && fId>this->currentImgIndex)
+        {
+            if (!this->loadNextFrame())
+                return false;
+        }
+
+        // we have loaded a new frame - specify that nothing's changed
+        this->changesPerformedUponCurrentAnnot = false;
 
         return true;
     }
@@ -841,21 +915,70 @@ bool AnnotationsSet::canReadPrevFrame() const
 }
 
 
-
-
-
-
-
-
-
-
-
-bool AnnotationsSet::saveCurrentState(const std::string& forceFileName) const
+string AnnotationsSet::getDefaultAnnotationsSaveFileName() const
 {
+    return this->config.getSummaryFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName) );
+}
+
+string AnnotationsSet::getDefaultCurrentImageSaveFileName() const
+{
+    return this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName) , this->currentImgIndex);
+}
+
+
+
+
+
+
+
+bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
+{
+    // open the file
+    FileStorage fsR(annotationsFileName, FileStorage::READ);
+
+    if (!fsR.isOpened())
+        return false;
+
+    FileNode globalAnnotsFnd = fsR[_AnnotationsSet_YAMLKey_Node];
+
+    if (globalAnnotsFnd.empty())
+        return false;
+
+    globalAnnotsFnd[_AnnotationsSet_YAMLKey_FilePath] >> this->imageFilePath;
+    globalAnnotsFnd[_AnnotationsSet_YAMLKey_ImageFileName] >> this->imageFileName;
+    globalAnnotsFnd[_AnnotationsSet_YAMLKey_VideoFileName] >> this->videoFileName;
+
+    // load the configuration before anything else
+    this->config.readContentFromYaml(globalAnnotsFnd);
+
+    // then read the record
+    this->annotsRecord.readContentFromYaml(globalAnnotsFnd);
+
+    // finally load the video or the image, depending on the case
+    if (this->imageFileName.length()>1)
+        return this->loadOriginalImage(this->imageFilePath + this->imageFileName);
+    else if (this->videoFileName.length()>1)
+        return this->loadOriginalVideo(this->imageFilePath + this->videoFileName);
+
+    return false;
+}
+
+
+
+bool AnnotationsSet::saveCurrentState(const std::string& forceFileName, bool saveOnlyIfNecessary)
+{
+    if (saveOnlyIfNecessary && !this->changesPerformedUponCurrentAnnot)
+        return true;
+
     // the place where we're going to save the current frame annotation file
     string savingFileName = forceFileName;
     if (savingFileName.length()<2)
-        savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->imageFileName);
+    {
+        if (this->isImageOpen())
+            savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->imageFileName);
+        else if (this->isVideoOpen())
+            savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->videoFileName);
+    }
 
     // verify that we can indeed store the file where we intend to store it
     QtCvUtils::generatePath(savingFileName);
@@ -864,15 +987,17 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName) const
     FileStorage fs(savingFileName, FileStorage::WRITE);
 
     // add a node, since loading is way more complicated when we don't add a base node
-    fs << "AnnotationsSet" << "{";
+    fs << _AnnotationsSet_YAMLKey_Node << "{";
+
+    fs << _AnnotationsSet_YAMLKey_FilePath << this->imageFilePath;
+    fs << _AnnotationsSet_YAMLKey_ImageFileName << this->imageFileName;
+    fs << _AnnotationsSet_YAMLKey_VideoFileName << this->videoFileName;
+
+    fs << _AnnotationsSet_YAMLKey_RecordingTimeDate << QtCvUtils::getDateTimeStr();
+
 
     // save the configuration
-    /*
-    void writeContentToYaml(cv::FileStorage& fs) const;
-    void readContentFromYaml(const cv::FileNode& fnd);
-    */
     this->config.writeContentToYaml(fs);
-
 
     // do the actual record
     this->annotsRecord.writeContentToYaml(fs);
@@ -885,12 +1010,8 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName) const
     if (!this->saveCurrentAnnotationImage())
         return false;
 
-    /* this is some test code used to verify whether we are able to read the yaml files or not
-    FileStorage fsR("/Users/pierrelemaire/Desktop/yamltest.yaml", FileStorage::READ);
-    AnnotationsRecord localRecord;
-    localRecord.readContentFromYaml(fsR["AnnotationsSet"]);
-    fsR.release();
-    */
+    // specify that we've recorded the changes
+    this->changesPerformedUponCurrentAnnot = false;
 
     return true;
 }
@@ -903,7 +1024,12 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
     // the place where we're going to save the current frame annotation file
     string savingFileName = forcedFileName;
     if (savingFileName.length()<2)
-        savingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+    {
+        if (this->isImageOpen())
+            savingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+        else if (this->isVideoOpen())
+            savingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->videoFileName, this->currentImgIndex);
+    }
 
     // find out how to associate a class and a color in the finally recorded annotation image
     vector<Point2i> colorsIndexSrc;
@@ -1076,7 +1202,12 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
     // loads an already annotated image. Starts with the idea that both the class and the objectId matrices were already filled with 0s
 
     // the place where we're going to save the current frame annotation file
-    string loadingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+    string loadingFileName;
+
+    if (this->isImageOpen())
+        loadingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->imageFileName, this->currentImgIndex);
+    else if (this->isVideoOpen())
+        loadingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->videoFileName, this->currentImgIndex);
 
 
 
@@ -1189,8 +1320,15 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
     }
 
     // now checking and/or updating the compliance with the annotations record
-    for (size_t k=0; k<observedObjectsList.size(); k++)
+
+    // first, perform some sorting... it's better to view the data in a slightly better arrangement
+    vector<size_t> orderedObsOvjList = AnnotationUtilities::sortP2iIndexes(observedObjectsList);
+
+    // now verify whether it's in the record, and if not, add it
+    for (size_t kOrd=0; kOrd<orderedObsOvjList.size(); kOrd++)
     {
+        size_t k = orderedObsOvjList[kOrd];
+
         // search the object within the record
         int recordedInd = this->annotsRecord.searchAnnotation(this->currentImgIndex, observedObjectsList[k].x, observedObjectsList[k].y);
 
@@ -1366,6 +1504,10 @@ int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLef
     this->handleAnnotationsModifications(affectedObjectsList, affectedObjectsBBs);
 
 
+    // specify that we have changed something to the image
+    this->changesPerformedUponCurrentAnnot = true;
+
+
 
     // ...and finally, we return the object Id...
     // in case this is only an update, the annotsRecord object should handle it properly
@@ -1432,6 +1574,9 @@ void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::
         }
     }
 
+
+    // specify that we have changed something to the image
+    this->changesPerformedUponCurrentAnnot = true;
 
     // now we should spend some time updating the record - we need to find the new bounding boxes, as well as the cases when an object was completely erased
     this->handleAnnotationsModifications(affectedObjectsList, affectedObjectsBBs);

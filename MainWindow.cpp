@@ -130,7 +130,8 @@ void MainWindow::selectAnnot(int id)
     // update the selection area
     // but first, handle the frame thing in case we're looking at a video
     if (this->annotations->getRecord().getAnnotationById(id).FrameNumber != this->annotations->getCurrentFramePosition())
-        this->annotateArea->displayFrame(this->annotations->getRecord().getAnnotationById(id).FrameNumber);
+        if (!this->annotateArea->displayFrame(this->annotations->getRecord().getAnnotationById(id).FrameNumber))
+            return;
 
     this->annotateArea->selectAnnotation(id);
 }
@@ -151,7 +152,10 @@ void MainWindow::openImage()
         QString fileName = QFileDialog::getOpenFileName(this,
                                    tr("Open Image File"), QDir::currentPath());
         if (!fileName.isEmpty())
+        {
+            this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
             this->annotateArea->openImage(fileName);
+        }
     }
 }
 
@@ -163,7 +167,10 @@ void MainWindow::openVideo()
         QString fileName = QFileDialog::getOpenFileName(this,
                                    tr("Open Video File"), QDir::currentPath());
         if (!fileName.isEmpty())
+        {
+            this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
             this->annotateArea->openVideo(fileName);
+        }
     }
 }
 
@@ -172,20 +179,47 @@ void MainWindow::loadAnnotations()
     if (maybeSave())
     {
         QString fileName = QFileDialog::getOpenFileName(this,
-                                   tr("Open Annotations File"), QDir::currentPath());
+                                   tr("Open Annotations File"), QDir::currentPath(), tr("XML/YAML/JSON file (*.xml *.yaml *.json)"));
         if (!fileName.isEmpty())
+        {
+            this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
             this->annotateArea->openAnnotations(fileName);
+        }
     }
 }
 
-void MainWindow::saveAnnotations()
+void MainWindow::saveAnnotationsAs()
 {
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Annotations File"),
+                                                    QDir(QString::fromStdString(this->annotations->getDefaultAnnotationsSaveFileName())).absolutePath(),
+                                                    tr("XML/YAML/JSON file (*.xml *.yaml *.json)"));
+    if (!fileName.isEmpty())
+    {
+        this->annotations->saveCurrentState(fileName.toStdString());
 
+        /*
+        this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
+        this->annotateArea->openVideo(fileName);
+        */
+    }
 }
+
+
+void MainWindow::save()
+{
+    this->annotations->saveCurrentState();
+}
+
 
 void MainWindow::saveCurrentImage()
 {
-
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Current Annotation Image"),
+                                                    QDir(QString::fromStdString(this->annotations->getDefaultCurrentImageSaveFileName())).absolutePath(),
+                                                    tr("PNG file (*.png)"));
+    if (!fileName.isEmpty())
+        this->annotations->saveCurrentAnnotationImage(fileName.toStdString());
 }
 
 void MainWindow::closeFile()
@@ -254,22 +288,26 @@ void MainWindow::about()
 void MainWindow::createActions()
 {
     this->openImageAct = new QAction(tr("&Open Image..."), this);
-    this->openImageAct->setShortcuts(QKeySequence::Open);
     connect(this->openImageAct, SIGNAL(triggered()), this, SLOT(openImage()));
 
     this->openVideoAct = new QAction(tr("Open &Video..."), this);
-    //this->openAct->setShortcuts(QKeySequence::Open);
     connect(this->openVideoAct, SIGNAL(triggered()), this, SLOT(openVideo()));
 
     this->openAnnotationsAct = new QAction(tr("Open &Annotations..."), this);
-    //this->openAct->setShortcuts(QKeySequence::Open);
+    this->openAnnotationsAct->setShortcuts(QKeySequence::Open);
     connect(this->openAnnotationsAct, SIGNAL(triggered()), this, SLOT(loadAnnotations()));
 
 
 
 
-    this->saveAnnotationsAct = new QAction(tr("&Save Annotations"), this);
-    connect(this->saveAnnotationsAct, SIGNAL(triggered()), this, SLOT(saveAnnotations()));
+
+    this->saveAct = new QAction(tr("&Save State"), this);
+    this->saveAct->setShortcuts(QKeySequence::Save);
+    connect(this->saveAct, SIGNAL(triggered()), this, SLOT(save()));
+
+    this->saveAnnotationsAct = new QAction(tr("&Save Annotations As"), this);
+    this->saveAct->setShortcuts(QKeySequence::SaveAs);
+    connect(this->saveAnnotationsAct, SIGNAL(triggered()), this, SLOT(saveAnnotationsAs()));
 
     this->saveCurrentImageAct = new QAction(tr("Save &Current Annotation (single frame)"), this);
     connect(this->saveCurrentImageAct, SIGNAL(triggered()), this, SLOT(saveCurrentImage()));
@@ -282,6 +320,7 @@ void MainWindow::createActions()
     this->closeFileAct = new QAction(tr("&Close"), this);
     this->closeFileAct->setShortcuts(QKeySequence::Close);
     connect(this->closeFileAct, SIGNAL(triggered()), this, SLOT(closeFile()));
+
 
 
     this->exitAct = new QAction(tr("E&xit"), this);
@@ -336,8 +375,9 @@ void MainWindow::createMenus()
     this->fileMenu->addAction(this->openVideoAct);
     this->fileMenu->addAction(this->openAnnotationsAct);
     this->fileMenu->addSeparator();
-    this->fileMenu->addAction(this->saveCurrentImageAct);
+    this->fileMenu->addAction(this->saveAct);
     this->fileMenu->addAction(this->saveAnnotationsAct);
+    this->fileMenu->addAction(this->saveCurrentImageAct);
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->printAct);
     this->fileMenu->addSeparator();
@@ -381,7 +421,8 @@ bool MainWindow::maybeSave()
                           | QMessageBox::Cancel);
         if (ret == QMessageBox::Save)
         {
-            return saveFile("png");
+            // return saveFile("png");
+            return this->annotations->saveCurrentState();
         }
         else if (ret == QMessageBox::Cancel)
         {
@@ -392,7 +433,7 @@ bool MainWindow::maybeSave()
 }
 
 
-
+/*
 bool MainWindow::saveFile(const QByteArray &fileFormat)
 {
     QString initialPath = QDir::currentPath() + "/untitled." + fileFormat;
@@ -408,9 +449,10 @@ bool MainWindow::saveFile(const QByteArray &fileFormat)
     }
     else
     {
-        return this->annotateArea->saveImage(fileName, fileFormat.constData());
+        return this->annotateArea->saveImage(fileName);
     }
 }
+*/
 
 /*
 void MainWindow::checkSave()
