@@ -72,6 +72,9 @@
 
 
 
+enum cursorShape { AA_CS_round, AA_CS_square };
+
+
 
 class AnnotateArea : public QWidget
 {
@@ -85,7 +88,6 @@ public:
     bool openAnnotations(const QString &fileName);
     bool saveImage(const QString &fileName);
     // void setPenColor(const QColor &newColor);
-    void setPenWidth(int newWidth);
 
 
     //void displayNextFrame();
@@ -94,8 +96,19 @@ public:
 
 
     bool isModified() const { return this->annotations->thereWereChangesPerformedUponCurrentAnnot(); }
+
     QColor penColor() const { return myPenColor; }
+
     int penWidth() const { return myPenWidth; }
+    void setPenWidth(int newWidth);
+    cursorShape getPenStyle() const { return this->myPenShape; }
+    void setPenStyle(cursorShape sh) { this->myPenShape = sh; this->setPenWidth(this->penWidth()); }
+
+    float getScale() const { return this->scaleFactor; }
+    //void setScale(float newScale) { this->scaleFactor = newScale; this->setFixedSize(this->BackgroundImage.size() * newScale); this->update(); }
+    void setScale(float newScale);
+
+
 
 
 public slots:
@@ -129,14 +142,21 @@ private:
     void updatePaintImage(const QRect& ROI=QRect(-3, -3, 0, 0));
 
 
+    QRect adaptToScale(const QRect&) const;
+
+
     // bool modified;
     bool scribbling, rubberMode;
     int myPenWidth;
     QColor myPenColor;
     int selectedClass, selectedObjectId;
 
+    cursorShape myPenShape;
+
     QImage PaintingImage, BackgroundImage, ObjectImage;
     QRect ObjectROI;
+
+    float scaleFactor;
 
     QBitmap CursorBitmap;
     QPoint lastPoint, firstAnnotPoint;

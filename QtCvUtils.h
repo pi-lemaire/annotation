@@ -138,6 +138,15 @@ namespace QtCvUtils
    {
        return QDateTime::currentDateTime().toString(Qt::ISODate).toStdString();
    }
+
+
+   template<typename T>
+   inline T getMax(T v1, T v2) { return (v1>v2) ? v1 : v2; }
+
+   template<typename T>
+   inline T getMin(T v1, T v2) { return (v1<v2) ? v1 : v2; }
+
+
 }
 
 

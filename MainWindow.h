@@ -55,6 +55,7 @@
 #include <QList>
 #include <QMainWindow>
 #include <QScrollArea>
+#include <QActionGroup>
 
 
 #include "AnnotationsSet.h"
@@ -92,7 +93,18 @@ private slots:
 
     void openConfiguration();
 
-    void penWidth();
+    void setPenWidth();
+    void increasePenWidth();
+    void decreasePenWidth();
+
+    void setZoomToOne();
+    void increaseZoom();
+    void decreaseZoom();
+
+    void switchPenStyle();
+
+
+
     void about();
 
 private:
@@ -130,7 +142,9 @@ private:
     QAction *nextFrameAct;
     QAction *prevFrameAct;
 
-    QAction *penWidthAct;
+    QAction *penWidthAct, *increasePenWidthAct, *decreasePenWidthAct, *penStyleRoundAct, *penStyleSquareAct;
+    QActionGroup *penStyleActGroup;
+    QAction *scaleToOneAct, *increaseScaleAct, *decreaseScaleAct;
     QAction *rubberModeAct;
     QAction *printAct;
     QAction *clearScreenAct;

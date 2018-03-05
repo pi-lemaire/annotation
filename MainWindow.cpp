@@ -57,6 +57,13 @@
 
 
 
+
+
+
+
+
+
+
 MainWindow::MainWindow()
 {
     // first, generate the "core" object that will handle the annotations
@@ -142,6 +149,11 @@ void MainWindow::updateActionsAvailability()
     this->nextFrameAct->setEnabled(this->annotations->canReadNextFrame());
     this->prevFrameAct->setEnabled(this->annotations->canReadPrevFrame());
     this->closeFileAct->setEnabled(this->annotations->isImageOpen() || this->annotations->isVideoOpen());
+    switch (this->annotateArea->getPenStyle())
+    {
+        case AA_CS_round: this->penStyleRoundAct->setChecked(true); break;
+        case AA_CS_square: this->penStyleSquareAct->setChecked(true); break;
+    }
 }
 
 
@@ -258,7 +270,7 @@ void MainWindow::penColor()
 }
 */
 
-void MainWindow::penWidth()
+void MainWindow::setPenWidth()
 {
     bool ok;
     int newWidth = QInputDialog::getInt(this, tr("Scribble"),
@@ -268,6 +280,72 @@ void MainWindow::penWidth()
     if (ok)
         this->annotateArea->setPenWidth(newWidth);
 }
+
+void MainWindow::increasePenWidth()
+{
+    int incr = 1;
+    if (this->annotateArea->getScale()>1.)
+        incr = (int)this->annotateArea->getScale();
+    this->annotateArea->setPenWidth(QtCvUtils::getMin(this->annotateArea->penWidth()+incr, 62));
+}
+
+void MainWindow::decreasePenWidth()
+{
+    int decr = 1;
+    if (this->annotateArea->getScale()>1.)
+        decr = (int)this->annotateArea->getScale();
+    this->annotateArea->setPenWidth(QtCvUtils::getMax(this->annotateArea->penWidth()-decr, 1));
+}
+
+void MainWindow::switchPenStyle()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (action == this->penStyleRoundAct)
+        this->annotateArea->setPenStyle(AA_CS_round);
+    else if (action == this->penStyleSquareAct)
+        this->annotateArea->setPenStyle(AA_CS_square);
+}
+
+
+void MainWindow::setZoomToOne()
+{
+    this->annotateArea->setScale(1.);
+}
+
+void MainWindow::increaseZoom()
+{
+    float mulFactor, maxZoom;
+    if (this->annotateArea->getScale()>=1.)
+    {
+        mulFactor = 2.; maxZoom = 16.;
+    }
+    else
+    {
+        mulFactor = 1.5; maxZoom = 1.;
+    }
+
+    this->annotateArea->setScale(QtCvUtils::getMin(this->annotateArea->getScale()*mulFactor, maxZoom));
+}
+
+void MainWindow::decreaseZoom()
+{
+    float divFactor, minZoom;
+    if (this->annotateArea->getScale()>1.)
+    {
+        divFactor = 2.; minZoom = 1.;
+    }
+    else
+    {
+        divFactor = 1.5; minZoom = 0.1;
+    }
+    this->annotateArea->setScale(QtCvUtils::getMax(this->annotateArea->getScale()/divFactor, minZoom));
+}
+
+
+
+
+
+
 
 void MainWindow::about()
 {
@@ -294,19 +372,18 @@ void MainWindow::createActions()
     connect(this->openVideoAct, SIGNAL(triggered()), this, SLOT(openVideo()));
 
     this->openAnnotationsAct = new QAction(tr("Open &Annotations..."), this);
-    this->openAnnotationsAct->setShortcuts(QKeySequence::Open);
     connect(this->openAnnotationsAct, SIGNAL(triggered()), this, SLOT(loadAnnotations()));
+
+    this->openAnnotationsAct->setShortcuts(QKeySequence::Open);
 
 
 
 
 
     this->saveAct = new QAction(tr("&Save State"), this);
-    this->saveAct->setShortcuts(QKeySequence::Save);
     connect(this->saveAct, SIGNAL(triggered()), this, SLOT(save()));
 
     this->saveAnnotationsAct = new QAction(tr("&Save Annotations As"), this);
-    this->saveAct->setShortcuts(QKeySequence::SaveAs);
     connect(this->saveAnnotationsAct, SIGNAL(triggered()), this, SLOT(saveAnnotationsAs()));
 
     this->saveCurrentImageAct = new QAction(tr("Save &Current Annotation (single frame)"), this);
@@ -315,17 +392,22 @@ void MainWindow::createActions()
     this->printAct = new QAction(tr("&Print..."), this);
     connect(this->printAct, SIGNAL(triggered()), this->annotateArea, SLOT(print()));
 
+    this->saveAct->setShortcuts(QKeySequence::Save);
+    this->saveAnnotationsAct->setShortcuts(QKeySequence::SaveAs);
+    this->printAct->setShortcuts(QKeySequence::Print);
+
 
 
     this->closeFileAct = new QAction(tr("&Close"), this);
-    this->closeFileAct->setShortcuts(QKeySequence::Close);
     connect(this->closeFileAct, SIGNAL(triggered()), this, SLOT(closeFile()));
 
 
-
     this->exitAct = new QAction(tr("E&xit"), this);
-    this->exitAct->setShortcuts(QKeySequence::Quit);
     connect(this->exitAct, SIGNAL(triggered()), this, SLOT(close()));
+
+    this->closeFileAct->setShortcuts(QKeySequence::Close);
+    this->exitAct->setShortcuts(QKeySequence::Quit);
+
 
 
 
@@ -333,31 +415,66 @@ void MainWindow::createActions()
 
 
 
-
     this->nextFrameAct = new QAction(tr("&Next frame"), this);
-    this->nextFrameAct->setShortcut(Qt::Key_Right);
     connect(this->nextFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(displayNextFrame()));
-
     this->prevFrameAct = new QAction(tr("&Previous frame"), this);
-    this->prevFrameAct->setShortcut(Qt::Key_Left);
     connect(this->prevFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(displayPrevFrame()));
-    /*
-    this->penColorAct = new QAction(tr("&Pen Color..."), this);
-    connect(this->penColorAct, SIGNAL(triggered()), this, SLOT(penColor()));
-    */
+
+
 
     this->penWidthAct = new QAction(tr("Pen &Width..."), this);
-    connect(this->penWidthAct, SIGNAL(triggered()), this, SLOT(penWidth()));
+    connect(this->penWidthAct, SIGNAL(triggered()), this, SLOT(setPenWidth()));
+    this->increasePenWidthAct = new QAction(tr("&Increase Pen Width..."), this);
+    connect(this->increasePenWidthAct, SIGNAL(triggered()), this, SLOT(increasePenWidth()));
+    this->decreasePenWidthAct = new QAction(tr("&Decrease Pen Width..."), this);
+    connect(this->decreasePenWidthAct, SIGNAL(triggered()), this, SLOT(decreasePenWidth()));
+
+    this->penStyleActGroup = new QActionGroup(this);
+    this->penStyleRoundAct = new QAction(tr("Use a &Round Pen"), this);
+    this->penStyleRoundAct->setCheckable(true);
+    this->penStyleActGroup->addAction(this->penStyleRoundAct);
+    connect(this->penStyleRoundAct, SIGNAL(triggered()), this, SLOT(switchPenStyle()));
+    this->penStyleSquareAct = new QAction(tr("Use a Square Pen"), this);
+    this->penStyleSquareAct->setCheckable(true);
+    this->penStyleActGroup->addAction(this->penStyleSquareAct);
+    connect(this->penStyleSquareAct, SIGNAL(triggered()), this, SLOT(switchPenStyle()));
+    this->penStyleActGroup->setEnabled(true);
+
+
+    this->scaleToOneAct = new QAction(tr("Set Zoom to &1:1"), this);
+    connect(this->scaleToOneAct, SIGNAL(triggered()), this, SLOT(setZoomToOne()));
+    this->increaseScaleAct = new QAction(tr("&Zoom in..."), this);
+    connect(this->increaseScaleAct, SIGNAL(triggered()), this, SLOT(increaseZoom()));
+    this->decreaseScaleAct = new QAction(tr("Zoom &back..."), this);
+    connect(this->decreaseScaleAct, SIGNAL(triggered()), this, SLOT(decreaseZoom()));
+
+
+
 
     this->rubberModeAct = new QAction(tr("&Rubber Mode"), this);
     connect(this->rubberModeAct, SIGNAL(triggered()), this->annotateArea, SLOT(switchRubberMode()));
     this->rubberModeAct->setCheckable(true);
-    this->rubberModeAct->setShortcut(Qt::Key_Delete);
+
 
     this->clearScreenAct = new QAction(tr("&Clear Screen"), this);
     this->clearScreenAct->setShortcut(tr("Ctrl+L"));
     connect(this->clearScreenAct, SIGNAL(triggered()),
             this->annotateArea, SLOT(clearImage()));
+
+
+
+    this->nextFrameAct->setShortcut(Qt::Key_Right);
+    this->prevFrameAct->setShortcut(Qt::Key_Left);
+    this->increasePenWidthAct->setShortcut(Qt::Key_Up);
+    this->decreasePenWidthAct->setShortcut(Qt::Key_Down);
+    this->scaleToOneAct->setShortcut(Qt::Key_0);
+    this->increaseScaleAct->setShortcut(Qt::Key_Plus);
+    this->decreaseScaleAct->setShortcut(Qt::Key_Minus);
+    this->rubberModeAct->setShortcut(Qt::Key_Delete);
+
+
+
+
 
     this->aboutAct = new QAction(tr("&About"), this);
     connect(this->aboutAct, SIGNAL(triggered()), this, SLOT(about()));
@@ -388,9 +505,19 @@ void MainWindow::createMenus()
     this->viewMenu = new QMenu(tr("&View"), this);
     this->viewMenu->addAction(this->nextFrameAct);
     this->viewMenu->addAction(this->prevFrameAct);
+    this->viewMenu->addSeparator();
+    this->viewMenu->addAction(this->scaleToOneAct);
+    this->viewMenu->addAction(this->increaseScaleAct);
+    this->viewMenu->addAction(this->decreaseScaleAct);
+
 
     this->optionMenu = new QMenu(tr("&Edition"), this);
     this->optionMenu->addAction(this->penWidthAct);
+    this->optionMenu->addAction(this->increasePenWidthAct);
+    this->optionMenu->addAction(this->decreasePenWidthAct);
+    this->optionMenu->addAction(this->penStyleRoundAct);
+    this->optionMenu->addAction(this->penStyleSquareAct);
+    this->optionMenu->addSeparator();
     this->optionMenu->addAction(this->rubberModeAct);
     this->optionMenu->addSeparator();
     this->optionMenu->addAction(this->clearScreenAct);
