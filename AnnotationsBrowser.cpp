@@ -180,6 +180,8 @@ void AnnotationsBrowser::updateBrowser(int selected)
     this->browser->setHtml(htmlCode);
 
     this->browser->setSource(QUrl("#source"));
+
+    this->setButtonsActivation();
 }
 
 
@@ -291,6 +293,64 @@ void AnnotationsBrowser::BrowserLinkClicked(const QUrl& url)
 }
 
 
+
+
+
+void AnnotationsBrowser::setButtonsActivation()
+{
+    // by default
+    this->buttonGroupAnnotations->setEnabled(false);
+    this->buttonSeparateAnnotations->setEnabled(false);
+
+    // no deletion available if no line is checked
+    this->buttonDeleteAnnotations->setEnabled(this->linesChecked.size()>0);
+
+    if (this->linesChecked.size()>1)
+    {
+        // group is available only if at least 2 objects of the same class are active
+        // separate is available only if an unique object was mentionned at least 2 times
+        std::vector<annotSelection> checkedCopies = this->linesChecked;
+
+        // annotsBrowserUtilities::sortSelections(checkedCopies);
+        sort(checkedCopies.begin(), checkedCopies.end(),
+             [](const annotSelection& a, const annotSelection& b) -> bool{
+            return ((a.classId<b.classId) || (a.classId==b.classId && a.objectId<b.objectId));}
+        );
+
+        annotSelection prevAnnot = checkedCopies[0];
+
+        char trueNumber = 0;
+
+        for (size_t k=1; k<checkedCopies.size(); k++)
+        {
+            if ( (checkedCopies[k].classId == prevAnnot.classId)
+                 && (this->annots->accessConfig().getProperty(prevAnnot.classId).classType != _ACT_Uniform) )
+            {
+                // multiple objects class, and same class - the only situation when group or separate can have some meaning
+                if (checkedCopies[k].objectId == prevAnnot.objectId)
+                {
+                    // at least 2 occurrences of the same object
+                    this->buttonSeparateAnnotations->setEnabled(true);
+                    trueNumber |= 1;
+                }
+                else if (checkedCopies[k].objectId != prevAnnot.objectId)
+                {
+                    // at least 2 different objects of the same class
+                    this->buttonGroupAnnotations->setEnabled(true);
+                    trueNumber |= 2;
+                }
+
+                if (trueNumber == 3)
+                    // both buttons are already set to true, no need to go further
+                    break;
+            }
+
+            prevAnnot = checkedCopies[k];
+        }
+
+    }
+
+}
 
 
 

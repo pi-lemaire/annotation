@@ -91,7 +91,7 @@ private slots:
     void saveCurrentImage();
     void closeFile();
 
-    void openConfiguration();
+    void loadConfiguration();
 
     void setPenWidth();
     void increasePenWidth();
@@ -126,13 +126,14 @@ private:
     QMenu *viewMenu;
     QMenu *optionMenu;
     QMenu *helpMenu;
+    QMenu *settingsMenu;
 
     QAction *openImageAct;
     QAction *openVideoAct;
     QAction *openAnnotationsAct;
     QAction *closeFileAct;
 
-    QAction *configMenuAct;
+    QAction *loadClassesConfigAct;
 
     QAction *saveAct;
     QAction *saveAnnotationsAct;

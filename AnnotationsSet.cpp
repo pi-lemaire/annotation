@@ -69,6 +69,25 @@ AnnotationsConfig::AnnotationsConfig(const AnnotationsConfig& ac)
 }
 
 
+void AnnotationsConfig::setDefaultConfig()
+{
+    // filling some basic configuration stuff
+    AnnotationsProperties prop;
+    prop.className = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdBGRRecRange=Vec3b(127, 127, 0);
+    this->addProperty(prop);
+    prop.className = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 127); prop.maxIdBGRRecRange=Vec3b(255, 255, 255);
+    this->addProperty(prop);
+    prop.className = "Truck"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(170, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 120); prop.maxIdBGRRecRange=Vec3b(255, 255, 120);
+    this->addProperty(prop);
+    prop.className = "Utility"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    this->addProperty(prop);
+
+    this->imageFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png";
+    this->summaryFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml";
+}
+
+
+
 
 string AnnotationsConfig::getAnnotatedImageFileName(const std::string& origImgPath, const std::string& origImgFileName, int frameNumber) const
 {
@@ -686,20 +705,6 @@ void AnnotationsSet::setDefaultConfig()
     this->originalImagesBuffer = vector<Mat>(this->bufferLength, Mat());
     this->annotationsClassesBuffer = vector<Mat>(this->bufferLength, Mat());
     this->annotationsIdsBuffer = vector<Mat>(this->bufferLength, Mat());
-
-    // filling some basic configuration stuff
-    AnnotationsProperties prop;
-    prop.className = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdBGRRecRange=Vec3b(127, 127, 0);
-    this->config.addProperty(prop);
-    prop.className = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 255); prop.maxIdBGRRecRange=Vec3b(3, 3, 255);
-    this->config.addProperty(prop);
-    prop.className = "Truck"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(170, 0, 0); prop.minIdBGRRecRange=Vec3b(170, 0, 0); prop.maxIdBGRRecRange=Vec3b(175, 57, 255);
-    this->config.addProperty(prop);
-    prop.className = "Bus"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(85, 0, 0); prop.maxIdBGRRecRange=Vec3b(85, 255, 255);
-    this->config.addProperty(prop);
-
-    this->config.setImageFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png");
-    this->config.setSummaryFileNamingRule(_AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml");
 }
 
 
@@ -1119,6 +1124,36 @@ bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
 
     return false;
 }
+
+
+
+
+
+
+bool AnnotationsSet::loadConfiguration(const std::string& configFileName)
+{
+    // open the file
+    FileStorage fsR(configFileName, FileStorage::READ);
+
+    if (!fsR.isOpened())
+        return false;
+
+    FileNode globalConfigFnd = fsR[_AnnotationsSet_YAMLKey_Node];
+
+    if (globalConfigFnd.empty())
+        return false;
+
+
+    // load the configuration before anything else
+    this->config.readContentFromYaml(globalConfigFnd);
+
+    return true;
+}
+
+
+
+
+
 
 
 

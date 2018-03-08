@@ -151,7 +151,7 @@ void MainWindow::selectAnnot(int id)
 
 void MainWindow::updateActionsAvailability()
 {
-    this->configMenuAct->setEnabled(!(this->annotations->isImageOpen() || this->annotations->isVideoOpen()));
+    this->loadClassesConfigAct->setEnabled(!(this->annotations->isImageOpen() || this->annotations->isVideoOpen()));
     this->nextFrameAct->setEnabled(this->annotations->canReadNextFrame());
     this->prevFrameAct->setEnabled(this->annotations->canReadPrevFrame());
     this->closeFileAct->setEnabled(this->annotations->isImageOpen() || this->annotations->isVideoOpen());
@@ -250,9 +250,25 @@ void MainWindow::closeFile()
 
 
 
-void MainWindow::openConfiguration()
+void MainWindow::loadConfiguration()
 {
     // TO BE COMPLETED
+    QString fileName = QFileDialog::getOpenFileName(this,
+                               tr("Open Annotations or Configuration File"), QDir::currentPath(), tr("XML/YAML/JSON file (*.xml *.yaml *.json)"));
+    if (!fileName.isEmpty())
+    {
+        if (this->annotations->loadConfiguration(fileName.toStdString()))
+        {
+            // don't be shy - just kill the thing and load it back
+            delete this->classSelection;
+
+            this->classSelection = new DialogClassSelection(this->annotations, this, Qt::Tool);
+            this->classSelection->show();
+            this->classSelection->setWindowTitle(tr("Class Selection"));
+            this->classSelection->move(100, 100);
+        }
+    }
+
 }
 
 /*
@@ -398,6 +414,8 @@ void MainWindow::createActions()
     this->printAct = new QAction(tr("&Print..."), this);
     connect(this->printAct, SIGNAL(triggered()), this->annotateArea, SLOT(print()));
 
+
+
     this->saveAct->setShortcuts(QKeySequence::Save);
     this->saveAnnotationsAct->setShortcuts(QKeySequence::SaveAs);
     this->printAct->setShortcuts(QKeySequence::Print);
@@ -417,7 +435,8 @@ void MainWindow::createActions()
 
 
 
-    this->configMenuAct = new QAction(tr("&Configure the classes"), this);
+    this->loadClassesConfigAct = new QAction(tr("&Load classes"), this);
+    connect(this->loadClassesConfigAct, SIGNAL(triggered()), this, SLOT(loadConfiguration()));
 
 
 
@@ -528,7 +547,11 @@ void MainWindow::createMenus()
     this->optionMenu->addSeparator();
     this->optionMenu->addAction(this->clearScreenAct);
     this->optionMenu->addSeparator();
-    this->optionMenu->addAction(this->configMenuAct);
+
+    // this->settingsMenu = this->optionMenu->addMenu(tr("&Settings..."));
+    this->settingsMenu = new QMenu(tr("&Settings"), this);
+    this->settingsMenu->addAction(this->loadClassesConfigAct);
+
 
     this->helpMenu = new QMenu(tr("&Help"), this);
     this->helpMenu->addAction(this->aboutAct);
@@ -537,6 +560,7 @@ void MainWindow::createMenus()
     menuBar()->addMenu(this->fileMenu);
     menuBar()->addMenu(this->viewMenu);
     menuBar()->addMenu(this->optionMenu);
+    menuBar()->addMenu(this->settingsMenu);
     menuBar()->addMenu(this->helpMenu);
 }
 

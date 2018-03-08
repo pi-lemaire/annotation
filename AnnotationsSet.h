@@ -56,6 +56,7 @@ namespace AnnotationUtilities
 
         return idx;
     }
+
 }
 
 
@@ -164,7 +165,7 @@ const std::string _AnnotsConfig_YAMLKey_SummaryFileNamingRule  = "SummaryFileNam
 class AnnotationsConfig
 {
 public:
-    AnnotationsConfig() {}
+    AnnotationsConfig() { this->setDefaultConfig(); }
     AnnotationsConfig(const AnnotationsConfig& ac); //{ this->propsSet = ac.getPropsSet(); this->fileNamingRule = ac.getFileNamingRule(); }
     ~AnnotationsConfig() {}
 
@@ -185,6 +186,9 @@ public:
     std::string getAnnotatedImageFileName(const std::string& origImgPath, const std::string& origImgFileName, int frameNumber) const;
     std::string getSummaryFileName(const std::string& origImgPath, const std::string& origiImgFileName) const;
 
+
+    // default config stuff
+    void setDefaultConfig();
 
 
 
@@ -370,6 +374,9 @@ public:
     bool loadOriginalImage(const std::string& imgFileName);
     bool loadOriginalVideo(const std::string& videoFileName);
     bool loadAnnotations(const std::string& annotationsFileName);
+
+    bool loadConfiguration(const std::string& configFileName);
+
 
 
     bool loadNextFrame();

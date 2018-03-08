@@ -37,10 +37,14 @@ DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* p
     connect(pListClasses, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(OnClassSelect(QListWidgetItem*)));
 }
 
+
 DialogClassSelection::~DialogClassSelection()
 {
     // this has to be filled some day, oh maybe someday, maybe someday day day..!
 }
+
+
+
 
 void DialogClassSelection::OnClassSelect(QListWidgetItem *)
 {
