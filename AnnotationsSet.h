@@ -292,6 +292,12 @@ public:
     void clearFrame(int frameId);                                           // remove all of the objects included in a given frame
 
 
+    void mergeIntraFrameAnnotationsTo(const std::vector<int>& annotsList, int newClassId, int newObjectId);
+    void deleteAnnotationsGroup(const std::vector<int>& deleteList);    // delete the annotations which record Ids are included in the deleteList
+    std::vector<int> separateAnnotations(const std::vector<int>& separateList);     // the concept here is to dissociate annotations that are the same object (class and object id)
+                                                                                    // but on different frames - returns the ids of objects which objectId has changed
+
+
     void clear();   // the ultimate killer - simply clear all of the vectors
 
 
@@ -411,6 +417,21 @@ public:
             // remove any class from an annotation at the pixel locations marked with a non-zero mask value.
 
 
+    void mergeAnnotations(const std::vector<int>& annotationsList);
+            // merge objects, both inter and intra frame given their IDs. The merge is only internal to a class - when the vector contains objects from various classes,
+            // we perform the computation only class by class
+
+    void deleteAnnotations(const std::vector<int>& annotationsList, bool onlyFromRecord=false);
+            // delete annotations given a list. Doesn't affect the pixels data if onlyFromRecord is set to true (useful
+
+    void separateAnnotations(const std::vector<int>& separateList);
+            // separate annotations : gives objects with the same object ID on different frames a separate object ID
+            // one of the separated objects keeps the same object id as before : it's the one that appears first in the list
+            // (maybe the one that has been checked first in the browser?)
+
+
+
+
     const AnnotationsConfig& getConfig() const { return this->config; }
     AnnotationsConfig& accessConfig() { return this->config; }
     const AnnotationsRecord& getRecord() const { return this->annotsRecord; }
@@ -431,9 +452,18 @@ private:
 
 
 
+    void loadAnnotationsImageFile(const std::string& fileName, cv::Mat& classesMat, cv::Mat& objIdsMat) const;
+    void saveAnnotationsImageFile(const std::string& fileName, const cv::Mat& classesMat, const cv::Mat& objIdsMat) const;
+
+
+
     // used within the class to make easier the modification of both matrices
     cv::Mat& accessCurrentAnnotationsClasses();
     cv::Mat& accessCurrentAnnotationsIds();
+
+
+
+    void mergeIntraFrameAnnotations(int newClassId, int newObjectId, const std::vector<int>& listObjects);
 
 
 

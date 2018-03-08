@@ -12,6 +12,12 @@
 #include "AnnotationsSet.h"
 
 
+struct annotSelection
+{
+    int recordId, frameId, classId, objectId;
+};
+
+
 class AnnotationsBrowser : public QWidget
 {
     Q_OBJECT
@@ -34,6 +40,7 @@ private slots:
 
 signals:
     void annotationSelected(int);
+    void changesCausedByTheBrowser();
 
 
 private:
@@ -45,7 +52,7 @@ private:
 
     int currentAnnotSelected;
 
-    std::vector<int> linesSelected;
+    std::vector<annotSelection> linesChecked;
 };
 
 

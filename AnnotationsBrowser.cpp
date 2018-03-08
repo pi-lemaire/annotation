@@ -51,9 +51,26 @@ void AnnotationsBrowser::updateBrowser(int selected)
 {
     this->currentAnnotSelected = selected;
 
-    QString htmlCode;
-    htmlCode += "<table width=100%>";
 
+    // verify that the checked lines are still coherent with the content of the record
+    // starting by the end in case we need to erase elements dynamically
+    for (int k=(int)this->linesChecked.size()-1; k>=0; k--)
+    {
+        // the record ID might have changed, but not the objects, class and frames
+        int testRecId = this->annots->getRecord().searchAnnotation(linesChecked[k].frameId, linesChecked[k].classId, linesChecked[k].objectId);
+
+        if (testRecId==-1)
+            // no object found, we uncheck it
+            this->linesChecked.erase(this->linesChecked.begin()+k);
+        else
+            // found something. However, the record ID might be different - we force the update, it doesn't cost anything more
+            this->linesChecked[k].recordId = testRecId;
+    }
+
+
+
+
+    // the following section tries to determine the best browser localization
 
     // by default, starting from the current frame...
     int startingFrame = this->annots->getCurrentFramePosition();
@@ -111,6 +128,9 @@ void AnnotationsBrowser::updateBrowser(int selected)
 
     // alright, we can start doing the actual stuff of feeding the browser area
 
+    QString htmlCode;
+    htmlCode += "<table width=100%>";
+
     // frames loop
     for (int iFrame=0; iFrame<this->annots->getRecord().getRecordedFramesNumber(); iFrame++)
     {
@@ -124,6 +144,16 @@ void AnnotationsBrowser::updateBrowser(int selected)
             QString boldTagOpen = "";
             QString boldTagClosed = "";
             QString sourceTag = "";
+            QString checkedCharacter = "[_]";
+
+            for (size_t k=0; k<this->linesChecked.size(); k++)
+            {
+                if (this->linesChecked[k].recordId==currAnnotId)
+                {
+                    checkedCharacter = "[X]";
+                    break;
+                }
+            }
 
             if (cv::Point2i(iFrame, jAnnotId) == bestSourcePosition)
                 sourceTag = "<a name='source'></a>";
@@ -140,7 +170,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
             htmlCode += "<td align=left>" + sourceTag + boldTagOpen + selectionLink + tr("Frame", "Annotation Browser") + " " + QString::number(currObj.FrameNumber) + "</a>" + boldTagClosed + "</td>";
             htmlCode += "<td align=left>- " + boldTagOpen + selectionLink + QString::fromStdString(this->annots->getConfig().getProperty(currObj.ClassId).className) + "</a>" + boldTagClosed + " -</td>";
             htmlCode += "<td align=left>" + boldTagOpen + selectionLink + tr("Object #", "Annotation Browser") + QString::number(currObj.ObjectId) + "</a>" + boldTagClosed + "</td>";
-            // htmlCode += "<td align=right><a href='chk_" + QString::number(frameNum) + "_" + QString::number(woodblockId) + "'><img src='" + checkBoxImg + "' /></a></td>";
+            htmlCode += "<td align=center>" + boldTagOpen + "<a href='chk_" + QString::number(currAnnotId) + "'>" + checkedCharacter + "</a>" + boldTagClosed + "</td>";
             htmlCode += "</tr>";
         }
     }
@@ -157,18 +187,55 @@ void AnnotationsBrowser::updateBrowser(int selected)
 
 void AnnotationsBrowser::GroupAnnotationsClicked()
 {
+    std::vector<int> listIds;
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        listIds.push_back(this->linesChecked[k].recordId);
+    }
 
+    this->annots->mergeAnnotations(listIds);
+
+    this->linesChecked.clear();
+
+    emit changesCausedByTheBrowser();
+
+    emit annotationSelected(-1);
 }
 
 void AnnotationsBrowser::SeparateAnnotationsClicked()
 {
+    std::vector<int> listIds;
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+        listIds.push_back(this->linesChecked[k].recordId);
 
+    this->annots->separateAnnotations(listIds);
+
+    this->linesChecked.clear();
+
+    // emit changesCausedByTheBrowser();
+    // this time, don't emit changesCaused - it won't affect anything visually
+
+    emit annotationSelected(-1);
 }
+
+
 
 void AnnotationsBrowser::DeleteAnnotationsClicked()
 {
+    std::vector<int> listIds;
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+        listIds.push_back(this->linesChecked[k].recordId);
 
+    this->annots->deleteAnnotations(listIds);
+
+    this->linesChecked.clear();
+
+    emit changesCausedByTheBrowser();
+
+    emit annotationSelected(-1);
 }
+
+
 
 
 void AnnotationsBrowser::BrowserLinkClicked(const QUrl& url)
@@ -189,16 +256,36 @@ void AnnotationsBrowser::BrowserLinkClicked(const QUrl& url)
 
     if (urlVal[0] == 'c')
     {
-        /*
-        // woodblock checked for diverse operations...
-        if (this->checkedAnnotation(linkFrameId, linkWBId))
-            this->uncheckAnAnnotation(linkFrameId, linkWBId);
-        else
-            this->checkAnAnnotation(linkFrameId, linkWBId);
+        bool unchecked = false;
 
-        this->updateBlocksSelection();
-        this->updateManipulateButtons();
-        */
+        // check wether it's a selection or a de-selection
+        for (size_t k=0; k<this->linesChecked.size(); k++)
+        {
+            if (linkId == this->linesChecked[k].recordId)
+            {
+                this->linesChecked.erase(this->linesChecked.begin()+k);
+
+                unchecked = true;
+                break;
+            }
+        }
+
+        if (!unchecked)
+        {
+            // store the new checked object
+            annotSelection newSel;
+            newSel.recordId = linkId;
+
+            // storing additional information will allow us to adapt when some annotation operations
+            // affect the various IDs recorded
+            newSel.frameId = this->annots->getRecord().getAnnotationById(linkId).FrameNumber;
+            newSel.classId = this->annots->getRecord().getAnnotationById(linkId).ClassId;
+            newSel.objectId = this->annots->getRecord().getAnnotationById(linkId).ObjectId;
+
+            this->linesChecked.push_back(newSel);
+        }
+
+        this->updateBrowser(this->currentAnnotSelected);
     }
 
 }

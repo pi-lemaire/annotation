@@ -115,6 +115,8 @@ public slots:
     void displayNextFrame();
     void displayPrevFrame();
 
+    void contentModified();
+
     void clearImage();
     void print();
     void switchRubberMode();

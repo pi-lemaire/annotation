@@ -108,6 +108,8 @@ MainWindow::MainWindow()
     QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotateArea, SLOT(selectClassId(int)));
 
     QObject::connect(this->annotsBrowser, SIGNAL(annotationSelected(int)), this, SLOT(selectAnnot(int)));
+    QObject::connect(this->annotsBrowser, SIGNAL(changesCausedByTheBrowser()), this->annotateArea, SLOT(contentModified()));
+
     QObject::connect(this->annotateArea, SIGNAL(selectedObject(int)), this->annotsBrowser, SLOT(updateBrowser(int)));
     QObject::connect(this->annotateArea, SIGNAL(updateSignal()), this, SLOT(updateActionsAvailability()));
 
@@ -116,6 +118,8 @@ MainWindow::MainWindow()
     setWindowTitle(tr("Annotate"));
     resize(500, 500);
 }
+
+
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
@@ -129,6 +133,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 }
 
+
+
 void MainWindow::selectAnnot(int id)
 {
     // update the selection browser
@@ -136,7 +142,7 @@ void MainWindow::selectAnnot(int id)
 
     // update the selection area
     // but first, handle the frame thing in case we're looking at a video
-    if (this->annotations->getRecord().getAnnotationById(id).FrameNumber != this->annotations->getCurrentFramePosition())
+    if ((id!=-1) && (this->annotations->getRecord().getAnnotationById(id).FrameNumber != this->annotations->getCurrentFramePosition()))
         if (!this->annotateArea->displayFrame(this->annotations->getRecord().getAnnotationById(id).FrameNumber))
             return;
 

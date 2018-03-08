@@ -79,7 +79,7 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent)
 
     this->scaleFactor = 1.0;
 
-    this->myPenShape = AA_CS_square;
+    this->myPenShape = AA_CS_round;
 
     this->setPenWidth(10);
     //this->myPenColor = Qt::blue;
@@ -257,6 +257,13 @@ void AnnotateArea::displayNextFrame()
 void AnnotateArea::displayPrevFrame()
 {
     this->displayFrame( this->annotations->getCurrentFramePosition()-1 );
+}
+
+
+void AnnotateArea::contentModified()
+{
+    this->updatePaintImage();
+    // this->selectAnnotation(this->selectedObjectId);
 }
 
 

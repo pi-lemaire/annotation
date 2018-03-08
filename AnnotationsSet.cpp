@@ -419,6 +419,161 @@ void AnnotationsRecord::clearFrame(int frameId)
 }
 
 
+
+
+void AnnotationsRecord::mergeIntraFrameAnnotationsTo(const std::vector<int>& annotsList, int newClassId, int newObjectId)
+{
+    // set newClassId and newObjectId to the first element in annotsList
+    // update its bounding box so that it includes all of the bounding box of the annotsList objects.
+
+    if (annotsList.size()<1)
+        return;
+
+    int firstAnnotId = annotsList[0];
+
+    if (firstAnnotId<0 || firstAnnotId>=(int)this->record.size())
+        return;
+
+    // storing currAnnot as a reference - this way we shall(?) access directly to the object and modify it straight away
+    AnnotationObject& currAnnot = this->record[firstAnnotId];
+
+    // if the new class and/or object id are different, we need tu update the indexing accordingly
+    if ((newClassId != currAnnot.ClassId) || (newObjectId != currAnnot.ObjectId))
+    {
+        // we also need to modify the indexation
+        // for now, we suppose that it's ok and that there's no incoherence in the indexation
+        for (size_t k=0; k<this->objectsIndex[currAnnot.ClassId-1][currAnnot.ObjectId].size(); k++)
+        {
+            // find the reference position and remove it
+            if (this->objectsIndex[currAnnot.ClassId-1][currAnnot.ObjectId][k] == firstAnnotId)
+            {
+                this->objectsIndex[currAnnot.ClassId-1][currAnnot.ObjectId].erase(this->objectsIndex[currAnnot.ClassId-1][currAnnot.ObjectId].begin()+k);
+                break;
+            }
+        }
+
+        // store the new reference index at the right place
+        // filling the class matrix with empty vectors if needed
+        while((int)this->objectsIndex.size()<newClassId)
+            this->objectsIndex.push_back(vector< vector<int> >());
+
+        // now the corresponding objects index...
+        while((int)this->objectsIndex[newClassId-1].size()<=newObjectId)
+            this->objectsIndex[newClassId-1].push_back(vector<int>());
+
+        // finally, storing the index into the objects record...
+        this->objectsIndex[newClassId-1][newObjectId].push_back(firstAnnotId);
+
+        // updating the reference
+        currAnnot.ClassId = newClassId;
+        currAnnot.ObjectId = newObjectId;
+    }
+
+    // running through the list to update the bounding box
+    for (size_t k=1; k<annotsList.size(); k++)
+    {
+        // in theory, such check is unnecessary?
+        if (annotsList[k]<0 || annotsList[k]>=(int)this->record.size())
+            continue;
+
+        if (this->record[annotsList[k]].FrameNumber != currAnnot.FrameNumber)
+            // the operation that we want to perform is relevant only if we're working on the same frame
+            continue;
+
+        // we will just use the bounding boxes - the objects are to be erased later
+        currAnnot.BoundingBox |= this->record[annotsList[k]].BoundingBox;
+    }
+}
+
+
+void AnnotationsRecord::deleteAnnotationsGroup(const std::vector<int>& deleteList)
+{
+    vector<int> deleteListCopy = deleteList;
+
+    sort(deleteListCopy.begin(), deleteListCopy.end());
+
+    for (int k=(int)deleteListCopy.size()-1; k>=0; k--)
+    {
+        this->removeAnnotation(deleteListCopy[k]);
+    }
+}
+
+
+
+
+vector<int> AnnotationsRecord::separateAnnotations(const std::vector<int>& separateList)
+{
+    // first step : find objects with similar class and object id - those are the objects that we will need to separate
+    vector<Point2i> listObjects;
+    vector<int> separateListCopy;
+
+    vector<int> idsReturn;
+
+    for (int k=0; k<(int)separateList.size(); k++)
+    {
+        // some safety check
+        if (separateList[k]<0 || separateList[k]>=(int)this->record.size())
+            continue;
+
+        listObjects.push_back( Point2i(this->getAnnotationById(separateList[k]).ClassId, this->getAnnotationById(separateList[k]).ObjectId) );
+        separateListCopy.push_back(separateList[k]);
+    }
+
+    // sort the objects
+    vector<size_t> orderedObjects = AnnotationUtilities::sortP2iIndexes(listObjects);
+
+    Point2i currObjIds(0,0); // setting an impossible set of object ids as a starting point
+
+    for (size_t k=0; k<orderedObjects.size(); k++)
+    {
+        if (listObjects[orderedObjects[k]] != currObjIds)
+        {
+            // new object found - we just store the current object Ids - it is the other case that'll be interesting
+            currObjIds = listObjects[orderedObjects[k]];
+        }
+        else
+        {
+            // same object as before - we need to provide it a new object id given its class
+            int newObjId = this->getFirstAvailableObjectId(currObjIds.x);
+
+            int oldObjId = listObjects[orderedObjects[k]].y;
+            int recordId = separateListCopy[orderedObjects[k]];
+            // fortunately this id won't have to change - it also means that we won't have to touch the frames record
+
+            // record the new object id
+            this->record[recordId].ObjectId = newObjId;
+
+            // removing the old object reference
+            // for once, we don't need to check that there's already a corresponding vector entry
+            for (size_t l=0; l<this->objectsIndex[currObjIds.x-1][oldObjId].size(); l++)
+            {
+                if (this->objectsIndex[currObjIds.x-1][oldObjId][l] == recordId)
+                {
+                    this->objectsIndex[currObjIds.x-1][oldObjId].erase(this->objectsIndex[currObjIds.x-1][oldObjId].begin() + l);
+                    break;
+                }
+            }
+
+            // now adding the new one
+            while ((int)this->objectsIndex[currObjIds.x-1].size()<=newObjId)
+                this->objectsIndex[currObjIds.x-1].push_back(vector<int>());
+
+            this->objectsIndex[currObjIds.x-1][newObjId].push_back(recordId);
+
+            // finally we remember that this record entry has been modified
+            idsReturn.push_back(recordId);
+        }
+    }
+
+    return idsReturn;
+}
+
+
+
+
+
+
+
 void AnnotationsRecord::clear()
 {
     // simply clean all the vectors
@@ -426,6 +581,10 @@ void AnnotationsRecord::clear()
     this->objectsIndex.clear();
     this->framesIndex.clear();
 }
+
+
+
+
 
 
 
@@ -487,8 +646,6 @@ void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
         this->objectsIndex[annot.ClassId-1][annot.ObjectId].push_back(idx);
     }
 }
-
-
 
 
 
@@ -1581,6 +1738,583 @@ void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::
     // now we should spend some time updating the record - we need to find the new bounding boxes, as well as the cases when an object was completely erased
     this->handleAnnotationsModifications(affectedObjectsList, affectedObjectsBBs);
 }
+
+
+
+void AnnotationsSet::mergeAnnotations(const std::vector<int>& annotationsList)
+{
+    // determine which classes and which objects we are supposed to merge
+    vector<Point2i> listObjects;
+    // vector<int> listFrames;
+
+    // use a copy to protect from wrong indices
+    vector<int> annotationsListCopy;
+
+    // first run through the annotations that we're supposed to merge
+    for (size_t k=0; k<annotationsList.size(); k++)
+    {
+        if (annotationsList[k]<0 || annotationsList[k]>=(int)this->annotsRecord.getRecord().size())
+            continue;
+
+        annotationsListCopy.push_back(annotationsList[k]);
+        listObjects.push_back( Point2i(this->annotsRecord.getAnnotationById(annotationsList[k]).ClassId, this->annotsRecord.getAnnotationById(annotationsList[k]).ObjectId) );
+        // listFrames.push_back( this->annotsRecord.getAnnotationById(annotationsList[k]).FrameNumber );
+    }
+
+    if (annotationsListCopy.size()<2)
+        // nothing to do here
+        return;
+
+    // get to know which objects are different and which are not
+    vector<size_t> orderedInds = AnnotationUtilities::sortP2iIndexes(listObjects);
+
+    Point2i prevObjectIds = Point2i(0,0);   // defining an impossible class Id so that we initiate the loop correctly
+
+    // the aim here is to determine which are the new objects that we are going to create, and from which origins
+    // since the indices have been sorted, we are guaranted that the new objects will have the lowest possible ID
+    vector<Point2i> newObjectIdsList;
+    int currNewObjInd = -1;
+    vector<vector<int>> correspondingOrigIdsList;
+    vector<vector<int>> correspondingObjIdsList;    // stores the object Ids for a given class
+
+
+    for (size_t k=0; k<orderedInds.size(); k++)
+    {
+        Point2i currObjectIds = listObjects[orderedInds[k]];
+        if (prevObjectIds.x != currObjectIds.x)
+        {
+            // we're in the case of a different class - we generate a new family of objects
+            newObjectIdsList.push_back(currObjectIds);
+            correspondingOrigIdsList.push_back(vector<int>());
+            correspondingObjIdsList.push_back(vector<int>());
+            currNewObjInd++;
+        }
+
+        // record the object into the list, at the correct place
+        correspondingOrigIdsList[currNewObjInd].push_back( annotationsListCopy[orderedInds[k]] );
+        correspondingObjIdsList[currNewObjInd].push_back(currObjectIds.y);
+        prevObjectIds = currObjectIds;
+    }
+
+
+
+    // we store here a list of objects that we will need to remove at the very end of the procedure
+    vector<int> objectsToRemove;
+
+
+
+    // now merging each object as required
+    for (size_t newObjK=0; newObjK<newObjectIdsList.size(); newObjK++)
+    {
+        if (correspondingOrigIdsList[newObjK].size()<2)
+            // actually, there's no merge here at all
+            continue;
+
+        // these are the new Ids of the merged object
+        int newObjectClassId = newObjectIdsList[newObjK].x;
+        int newObjectObjId = newObjectIdsList[newObjK].y;
+
+
+        // eliminating doublons
+        vector<int> elagatedObjectsList;
+        sort(correspondingObjIdsList[newObjK].begin(), correspondingObjIdsList[newObjK].end());
+        if (correspondingObjIdsList[newObjK].size()>=1)
+        {
+            elagatedObjectsList.push_back(correspondingObjIdsList[newObjK][0]);
+            size_t currListIdx = 0;
+            for (size_t k=1; k<correspondingObjIdsList[newObjK].size(); k++)
+            {
+                if (correspondingObjIdsList[newObjK][k] != elagatedObjectsList[currListIdx])
+                {
+                    elagatedObjectsList.push_back(correspondingObjIdsList[newObjK][k]);
+                    currListIdx++;
+                }
+            }
+        }
+
+
+        // now determining intra frame merges
+        vector<Point2i> frameAndObjectId;
+        for (size_t k=0; k<elagatedObjectsList.size(); k++)
+        {
+            for (size_t i=0; i<this->annotsRecord.getAnnotationIds(newObjectClassId, elagatedObjectsList[k]).size(); i++)
+            {
+                int currId = this->annotsRecord.getAnnotationIds(newObjectClassId, elagatedObjectsList[k])[i];
+                frameAndObjectId.push_back(Point2i(this->annotsRecord.getAnnotationById(currId).FrameNumber, currId));
+            }
+        }
+
+        // there should be no doublons in this vector, in theory. I need to confirm that however
+
+
+
+        /*
+        // determining intra-frame merges
+        vector<Point2i> frameAndObjectId;
+        for (size_t k=0; k<correspondingOrigIdsList[newObjK].size(); k++)
+        {
+            int currId = correspondingOrigIdsList[newObjK][k];
+            frameAndObjectId.push_back(Point2i(this->annotsRecord.getAnnotationById(currId).FrameNumber, currId));
+        }
+        */
+
+
+
+        // we sort the indexes so that the frame id appears first
+        vector<size_t> orderedFramesAndIds = AnnotationUtilities::sortP2iIndexes(frameAndObjectId);
+
+        int prevFrameId = -1;
+        // when we see that we're caring about a new frame, we call a function that merges the Ids into
+        // the intraFrameMergeIndices vector as an intra frame merge - we give the merged object the ID newObjectObjId of class newObjectClassId
+        // we also keep a track of all the objects that are no longer useful into objectsToRemove - this will be called at the end
+        vector<int> intraFrameMergeIndices;
+        // vector<int> objectsToRemove;
+
+        for (size_t k=0; k<orderedFramesAndIds.size(); k++)
+        {
+            if (frameAndObjectId[orderedFramesAndIds[k]].x != prevFrameId)
+            {
+                // we're having a new frame there, store what changes have been recorded until then
+                this->mergeIntraFrameAnnotations(newObjectClassId, newObjectObjId, intraFrameMergeIndices);
+
+                // this has been processed - just clear
+                intraFrameMergeIndices.clear();
+
+                // store the new frame id
+                prevFrameId = frameAndObjectId[orderedFramesAndIds[k]].x;
+            }
+            else
+                // if we're there, it's not a first object. It's supposed to be removed
+                objectsToRemove.push_back(frameAndObjectId[orderedFramesAndIds[k]].y);
+
+            // record the object into the list
+            intraFrameMergeIndices.push_back(frameAndObjectId[orderedFramesAndIds[k]].y);
+        }
+
+        // don't forget that the last recorded frame might contain some stufffff
+        this->mergeIntraFrameAnnotations(newObjectClassId, newObjectObjId, intraFrameMergeIndices);
+    }
+
+    // finally erase all of the unnecessary objects
+    this->deleteAnnotations(objectsToRemove, true);
+}
+
+
+
+
+
+
+void AnnotationsSet::deleteAnnotations(const std::vector<int>& annotationsList, bool onlyFromRecord)
+{
+    if (!onlyFromRecord)
+    {
+        // also remove the annotations from the images
+
+        // first sort the list according to the frame id - this way we handle every frame separately
+        vector<Point2i> frameAndIdVec;
+        for (size_t k=0; k<annotationsList.size(); k++)
+        {
+            // const AnnotationObject& currObj = this->annotsRecord.getAnnotationById(annotationsList[k]);
+            frameAndIdVec.push_back(Point2i(this->annotsRecord.getAnnotationById(annotationsList[k]).FrameNumber, annotationsList[k]));
+        }
+
+        vector<size_t> vecOrder = AnnotationUtilities::sortP2iIndexes(frameAndIdVec);
+
+        // then treat each frame after the other
+
+        // init with an impossible frame number
+        int currFrame = -1;
+        vector<int> currFrameAnnotList;
+
+        for (size_t k=0; k<vecOrder.size(); k++)
+        {
+            if (frameAndIdVec[vecOrder[k]].x != currFrame)
+            {
+                // call the mergeIntraFrameAnnotations procedure.... this works only if the annotations record is still up to date
+                // this is something that we need to ensure....?
+                this->mergeIntraFrameAnnotations(0, 0, currFrameAnnotList);
+                currFrameAnnotList.clear();
+            }
+            currFrame = frameAndIdVec[vecOrder[k]].x;
+            currFrameAnnotList.push_back(frameAndIdVec[vecOrder[k]].y);
+        }
+
+        // do the final deletion
+        this->mergeIntraFrameAnnotations(0, 0, currFrameAnnotList);
+    }
+
+    // finally delete them from the record
+    this->annotsRecord.deleteAnnotationsGroup(annotationsList);
+}
+
+
+
+
+
+
+
+
+
+void AnnotationsSet::separateAnnotations(const std::vector<int>& separateList)
+{
+    // we store the old object ids
+    vector<int> separateListPrevObjIds;
+    for (size_t k=0; k<separateList.size(); k++)
+        separateListPrevObjIds.push_back(this->annotsRecord.getAnnotationById(separateList[k]).ObjectId);
+
+
+    // for once, we start with the record modification
+    vector<int> modifiedObjects = this->annotsRecord.separateAnnotations(separateList);
+
+    // store the pair formed by prev and new object ids
+    vector<Point2i> oldAndNewObjectIds;
+
+    // now finding the frames where something happened
+    vector<Point2i> modifiedFramesAndObjects;
+
+    for (size_t k=0; k<modifiedObjects.size(); k++)
+    {
+        modifiedFramesAndObjects.push_back( Point2i(this->annotsRecord.getAnnotationById(modifiedObjects[k]).FrameNumber, modifiedObjects[k]) );
+
+        // finding the old object correspondance, in the original separateList
+        // this is in N2 complexity but I assume that the number of elements of separateList will never be so big as
+        // this could be a problem...?!?
+        for (size_t l=0; l<separateList.size(); l++)
+        {
+            if (separateList[l] == modifiedObjects[k])  // same ID, same object then
+            {
+                oldAndNewObjectIds.push_back( Point2i(separateListPrevObjIds[l], this->annotsRecord.getAnnotationById(modifiedObjects[k]).ObjectId) );
+                break;
+            }
+        }
+    }
+
+
+    // now sorting frames and Ids so that we only handle each frame once
+    vector<size_t> orderedByFramesIndexes = AnnotationUtilities::sortP2iIndexes(modifiedFramesAndObjects);
+
+    int currFrame = -1;
+    Mat classesMat, objIdsMat;
+
+    string imgFileName = (this->isVideoOpen() ? this->videoFileName : this->imageFileName);
+    string currannotsFileName;
+
+
+    for (size_t k=0; k<orderedByFramesIndexes.size(); k++)
+    {
+        if (modifiedFramesAndObjects[orderedByFramesIndexes[k]].x != currFrame)
+        {
+            if (classesMat.data)
+            {
+                // store the modifications that have been performed before
+                this->saveAnnotationsImageFile(currannotsFileName, classesMat, objIdsMat);
+
+                // also updating the buffers
+                if (currFrame>(this->maxImgReached-this->bufferLength) && currFrame<=this->maxImgReached)
+                {
+                    classesMat.copyTo(this->annotationsClassesBuffer[currFrame%this->bufferLength]);
+                    objIdsMat.copyTo(this->annotationsIdsBuffer[currFrame%this->bufferLength]);
+                }
+            }
+
+            // this is the frame we're working on
+            currFrame = modifiedFramesAndObjects[orderedByFramesIndexes[k]].x;
+            currannotsFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, imgFileName, currFrame);
+
+            // is it in the buffer?
+            if (currFrame>(this->maxImgReached-this->bufferLength) && currFrame<=this->maxImgReached)
+            {
+                // yes - just copy the content of the buffers
+                this->annotationsClassesBuffer[currFrame%this->bufferLength].copyTo(classesMat);
+                this->annotationsIdsBuffer[currFrame%this->bufferLength].copyTo(objIdsMat);
+            }
+            else
+                this->loadAnnotationsImageFile(currannotsFileName, classesMat, objIdsMat);
+        }
+
+
+        // now perform the actual modifications
+        const AnnotationObject& currentAnnotObj = this->annotsRecord.getAnnotationById( modifiedFramesAndObjects[orderedByFramesIndexes[k]].y );
+        int oldObjId = oldAndNewObjectIds[orderedByFramesIndexes[k]].x;
+        int newObjId = oldAndNewObjectIds[orderedByFramesIndexes[k]].y;
+
+        // run through the image and perform the modifications
+        for (int i=currentAnnotObj.BoundingBox.tl().y; i<currentAnnotObj.BoundingBox.br().y; i++)
+        {
+            for (int j=currentAnnotObj.BoundingBox.tl().x; j<currentAnnotObj.BoundingBox.br().x; j++)
+            {
+                if ((classesMat.at<int16_t>(i,j)==currentAnnotObj.ClassId) && (objIdsMat.at<int32_t>(i,j)==oldObjId))
+                    objIdsMat.at<int32_t>(i,j) = newObjId;
+            }
+        }
+    }
+
+    // don't forget to store the result in case it's needed
+    if (classesMat.data)
+    {
+        // store the modifications that have been performed before
+        this->saveAnnotationsImageFile(currannotsFileName, classesMat, objIdsMat);
+
+        // also updating the buffers
+        if (currFrame>(this->maxImgReached-this->bufferLength) && currFrame<=this->maxImgReached)
+        {
+            classesMat.copyTo(this->annotationsClassesBuffer[currFrame%this->bufferLength]);
+            objIdsMat.copyTo(this->annotationsIdsBuffer[currFrame%this->bufferLength]);
+        }
+    }
+
+    // pfffouuuhhh... it's over i think
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId, const std::vector<int>& listObjects)
+{
+    // some safety check
+    if (listObjects.size()<1)
+        return;
+
+    // retrieve the frame number
+    int frameNumber = this->annotsRecord.getAnnotationById(listObjects[0]).FrameNumber;
+
+    // prepare the image to be modified - we only need to modify the object ids mat
+    Mat imToModifyObjIds, imToModifyClasses;
+
+    string imgFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName), frameNumber);
+
+
+    // is it in the buffer?
+    if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+    {
+        this->annotationsClassesBuffer[frameNumber%this->bufferLength].copyTo(imToModifyClasses);
+        this->annotationsIdsBuffer[frameNumber%this->bufferLength].copyTo(imToModifyObjIds);
+    }
+    else
+    {
+        // load the images if available
+        this->loadAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+    }
+
+    if (imToModifyClasses.data && imToModifyObjIds.data)
+    {
+        // we can proceed to modifying the images
+        for (size_t k=0; k<listObjects.size(); k++)
+        {
+            // storing the references of the object that we wish to modify
+            const AnnotationObject& annObj = this->annotsRecord.getAnnotationById(listObjects[k]);
+
+            // avoiding to do some unnecessary thing..
+            if (annObj.ClassId==newClassId && annObj.ObjectId==newObjectId)
+                continue;
+
+            // running through the image (only the bounding box, actually) to modify the pixels
+            for (int i=annObj.BoundingBox.tl().y; i<annObj.BoundingBox.br().y; i++)
+            {
+                for (int j=annObj.BoundingBox.tl().x; j<annObj.BoundingBox.br().x; j++)
+                {
+                    if (imToModifyClasses.at<int16_t>(i,j)==annObj.ClassId && imToModifyObjIds.at<int32_t>(i,j)==annObj.ObjectId)
+                    {
+                        imToModifyClasses.at<int16_t>(i,j) = newClassId;
+                        imToModifyObjIds.at<int32_t>(i,j) = newObjectId;
+                    }
+                }
+            }
+        }
+
+        // storing the "upgraded" version of this image
+        this->saveAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+
+        // copy back the data to the buffer in case it was already buffered
+        if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+        {
+            imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
+            imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
+        }
+    }
+
+    // finally, we simply call the merge procedure from the record
+    this->annotsRecord.mergeIntraFrameAnnotationsTo(listObjects, newClassId, newObjectId);
+}
+
+
+
+void AnnotationsSet::loadAnnotationsImageFile(const std::string& fileName, cv::Mat& classesMat, cv::Mat& objIdsMat) const
+{
+    // this method only loads the data - unlike loadCurrentAnnotation, it takes for granted that the file is well formatted
+
+    // remove all of the data first - the presence or absence of data will show the success of the method or not
+    classesMat.release();
+    objIdsMat.release();
+
+    // try to load the image, the color format is mandatory
+    Mat imLoad = imread(fileName, CV_LOAD_IMAGE_COLOR);
+
+    // if it was impossible to load the file, simply quit
+    if (!imLoad.data)
+        return;
+
+    // look at the config and record the minColorIndex and the maxColorIndex, it is faster
+    vector<Vec3b> minColorIndex, maxColorIndex;
+    vector<Vec3i> multipliersIndex;
+    vector<bool> classUniform;
+
+    // fill the vectors..
+    for (int i=0; i<this->config.getPropsNumber(); i++)
+    {
+        classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
+
+        minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
+
+        // warning : there's an exception when the class is uniform
+        if (classUniform[i])
+            maxColorIndex.push_back(minColorIndex[i]);
+        else
+            maxColorIndex.push_back(this->config.getProperty(i+1).maxIdBGRRecRange);
+
+        // already calculate the multipliers
+        multipliersIndex.push_back( Vec3i(1, (maxColorIndex[i][0]-minColorIndex[i][0]+1), (maxColorIndex[i][0]-minColorIndex[i][0]+1)*(maxColorIndex[i][1]-minColorIndex[i][1]+1)) );
+    }
+
+    // initialize classesMat and objIdsMat
+    classesMat = Mat::zeros(imLoad.size(), CV_16SC1);
+    objIdsMat = Mat::zeros(imLoad.size(), CV_32SC1);
+
+
+    // read the image content...
+    for (int i=0; i<imLoad.rows; i++)
+    {
+        for (int j=0; j<imLoad.cols; j++)
+        {
+            Vec3b pxValue = imLoad.at<Vec3b>(i,j);
+
+            if (pxValue != Vec3b(0,0,0))    // there is something there..
+            {
+                for (int k=0; k<(int)minColorIndex.size(); k++)
+                {
+                    if ( (pxValue[0]>=minColorIndex[k][0]) && (pxValue[1]>=minColorIndex[k][1]) && (pxValue[2]>=minColorIndex[k][2])
+                         && (pxValue[0]<=maxColorIndex[k][0]) && (pxValue[1]<=maxColorIndex[k][1]) && (pxValue[2]<=maxColorIndex[k][2]) )
+                    {
+                        // we belong to this class
+                        classesMat.at<int16_t>(i,j) = k+1;
+
+                        // if the class uniform, we don't need to do anything else
+                        // if not, however, we need to decode the pixels information
+                        if (!classUniform[k])
+                        {
+                            // this is just a matter of multiplication, nothing fancy here
+                            int objInd = (multipliersIndex[k][0] * (pxValue[0]-minColorIndex[k][0]))
+                                       + (multipliersIndex[k][1] * (pxValue[1]-minColorIndex[k][1]))
+                                       + (multipliersIndex[k][2] * (pxValue[2]-minColorIndex[k][2]));
+
+                            objIdsMat.at<int32_t>(i,j) = objInd;
+                        }
+
+                        // there's no need to go any further, we know already the right class and object id
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // that's all
+}
+
+
+
+
+
+
+
+void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const cv::Mat& classesMat, const cv::Mat& objIdsMat) const
+{
+    // this method only loads the data - unlike loadCurrentAnnotation, it takes for granted that the file is well formatted
+
+    if (!classesMat.data || (classesMat.size() != objIdsMat.size()))
+        return;
+
+    // generate the image that we will want to store
+    Mat generateIm = Mat::zeros(classesMat.size(), CV_8UC3);
+
+
+    // look at the config and record the minColorIndex and the maxColorIndex, it is faster
+    vector<Vec3b> minColorIndex, maxColorIndex;
+    vector<Vec3i> dividersIndex;
+    vector<bool> classUniform;
+
+    // fill the vectors..
+    for (int i=0; i<this->config.getPropsNumber(); i++)
+    {
+        classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
+
+        minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
+
+        // warning : there's an exception when the class is uniform
+        if (classUniform[i])
+            maxColorIndex.push_back(minColorIndex[i]);
+        else
+            maxColorIndex.push_back(this->config.getProperty(i+1).maxIdBGRRecRange);
+
+        // already calculate the dividers
+        dividersIndex.push_back( Vec3i((maxColorIndex[i][0]-minColorIndex[i][0]+1), (maxColorIndex[i][1]-minColorIndex[i][1]+1), (maxColorIndex[i][2]-minColorIndex[i][2]+1)) );
+    }
+
+
+    // run through the image content and fill the pixel colors...
+    for (int i=0; i<classesMat.rows; i++)
+    {
+        for (int j=0; j<classesMat.cols; j++)
+        {
+            if (classesMat.at<int16_t>(i,j) != 0)    // there is something there..
+            {
+                int currClass = classesMat.at<int16_t>(i,j);
+
+                if (classUniform[currClass-1])
+                    // simplest case - uniform : we use the min value
+                    generateIm.at<Vec3b>(i,j) = minColorIndex[currClass-1];
+                else
+                {
+                    // hardest case : we have to calculate the Vec3b value
+                    // unlike the saveCurrentAnnot, we cannot calculate it "offline" because we cannot count on the record indexation
+                    Vec3b bytesContent;
+                    int currObjIdRemaining = objIdsMat.at<int32_t>(i,j);
+                    for (size_t c=0; c<3; c++)
+                    {
+                        // +1 is there because the max value is to be included
+                        // anyway, x%1 == 0 and x/1 == x
+                        bytesContent[c] = (uchar) currObjIdRemaining % (dividersIndex[currClass-1][c]);
+                        currObjIdRemaining /= (dividersIndex[currClass-1][c]);
+                    }
+
+                    // fill the color
+                    for (size_t c=0; c<3; c++)
+                    {
+                        generateIm.at<Vec3b>(i,j)[c] = bytesContent[c] + minColorIndex[currClass-1][c];
+                    }
+                }
+            }
+        }
+    }
+
+    // finally store the image
+    QtCvUtils::imwrite(fileName, generateIm);
+}
+
+
+
 
 
 
