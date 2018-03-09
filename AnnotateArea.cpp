@@ -202,7 +202,7 @@ void AnnotateArea::setPenWidth(int newWidth)
 void AnnotateArea::setScale(float newScale)
 {
     this->scaleFactor = newScale;
-    this->setFixedSize(this->BackgroundImage.size() * newScale);
+    this->setWidgetSize(this->BackgroundImage.size() * newScale);
 
     if (newScale>1.)
     {
@@ -227,7 +227,7 @@ void AnnotateArea::reload()
 
 
     // set the widget to the right size - the QScrollArea should do the rest
-    this->setFixedSize(this->BackgroundImage.size() * this->scaleFactor);
+    this->setWidgetSize(this->BackgroundImage.size() * this->scaleFactor);
 
     this->selectedObjectId = -1;
     // this->selectedClass = 0;
@@ -235,6 +235,16 @@ void AnnotateArea::reload()
     // prepare for the annotation stuff, and display the result
     //this->modified = false;
     update();
+}
+
+
+
+
+void AnnotateArea::setWidgetSize(const QSize& newSize)
+{
+    this->setFixedSize(newSize);
+    this->BoundingBoxesImage = QImage(newSize, QImage::Format_ARGB32);
+    this->BoundingBoxesImage.fill(qRgba(255, 255, 255, 0));
 }
 
 
@@ -296,6 +306,7 @@ bool AnnotateArea::displayFrame(int id)
 void AnnotateArea::clearImage()
 {
     this->PaintingImage.fill(qRgba(255, 255, 255, 0));
+
     //this->modified = true;
     // updateContent();
     this->update();
@@ -405,6 +416,8 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
         // .. but this implies some fiddling with ROIs
 
         // remove the displayed part corresponding to the previous ROI
+        // also specify that nothing is selected anymore (it's useful for the bounding boxes display thing)
+        this->selectedObjectId = -1;
         QRect previousROI = this->ObjectROI;
         this->ObjectROI = QRect(-3, -3, 0, 0);
         this->update( this->adaptToScaleMul(previousROI.adjusted(-2, -2, 2, 2)) );
@@ -506,19 +519,29 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     // draw the content of the widget - we draw directly on the widget itself
     QPainter painter(this);
 
+
     // dirtyRect corresponds to the area which we want to update in the widget
     // either it's external, thus it's related to the scaled version of the image (what's visible of the widget),
     // either it's internal, but we had to adapt to the external version, thus all the systematic calls to adaptToScale()
     QRect dirtyRect = event->rect();
 
-    //qDebug() << "dirtyRect :" << dirtyRect;
 
-    /*
-    dirtyRect.setTopLeft(this->adaptToScaleDiv(dirtyRect.topLeft()));
-    dirtyRect.setBottomRight(this->adaptToScaleDiv(dirtyRect.bottomRight()));
-    */
+
+
+    if (this->BackgroundImage.size()==QSize(0,0))
+    {
+        // no need to spend some time and get some warnings if there isn't anything to display
+        // we just paint an empty image and return then
+        painter.setOpacity(1.);
+        painter.drawImage(dirtyRect.topLeft(), this->BackgroundImage);
+        painter.end();
+        return;
+    }
+
+
 
     // use ceil and floor to ensure that the desired area is well included
+    // first register to the original image dimensions
     dirtyRect.setTop( floor((float)dirtyRect.top() / this->scaleFactor) );
     dirtyRect.setLeft( floor((float)dirtyRect.left() / this->scaleFactor) );
     dirtyRect.setRight( ceil((float)dirtyRect.right() / this->scaleFactor) );
@@ -531,28 +554,12 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     dirtyRect = this->adaptToScaleMul(dirtyRect);
 
 
-    //qDebug() << "dirtyRect :" << dirtyRect << " ; origImgArea : " << origImgArea;
-
-    /*
-    dirtyRect.setTop(floor(dirtyRect.top() / this->scaleFactor) * this->scaleFactor);
-    dirtyRect.setLeft(floor(dirtyRect.left() / this->scaleFactor) * this->scaleFactor);
-    dirtyRect.setRight(ceil(dirtyRect.right() / this->scaleFactor) * this->scaleFactor);
-    dirtyRect.setBottom(ceil(dirtyRect.bottom() / this->scaleFactor) * this->scaleFactor);
-    */
-
-    // QRect origImgArea = QRect(dirtyRect.topLeft() / this->scaleFactor, dirtyRect.bottomRight() / this->scaleFactor);
-
-    // qDebug() << "dirtyRect is " << dirtyRect;
-
-
     // first draw the BG image, use only the visible part
     painter.setOpacity(1.);
-    // painter.drawImage(dirtyRect, this->BackgroundImage.scaled(this->BackgroundImage.size() * this->scaleFactor), dirtyRect);
     painter.drawImage(dirtyRect.topLeft(), this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
 
     // now draw the annotations... remove some opacity so that the background is always visible
     painter.setOpacity(0.6);
-    // painter.drawImage(dirtyRect, this->PaintingImage.scaled(this->BackgroundImage.size() * this->scaleFactor), dirtyRect);
     painter.drawImage(dirtyRect.topLeft(), this->PaintingImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
 
     /*
@@ -560,9 +567,13 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
              << "after painting it : " << this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding).size()
              << "area where we paint it : " << dirtyRect;
              */
+    // now displaying the bounding boxes - only if we're not in scribble mode
+    this->drawBoundingBoxes(dirtyRect);
+    painter.setOpacity(0.8);
+    painter.drawImage(dirtyRect.topLeft(), this->BoundingBoxesImage.copy(dirtyRect));
 
 
-
+    /*
     // display the selected object
     if (!this->scribbling && this->selectedObjectId != -1)
     {
@@ -570,17 +581,13 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
         this->ObjectROI = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox);
 
         QRect modifiedROI = this->adaptToScaleMul(this->ObjectROI);
-        /*
-        modifiedROI.setTopLeft( this->adapt this->ObjectROI.topLeft() * this->scaleFactor);
-        modifiedROI.setBottomRight(this->ObjectROI.bottomRight() * this->scaleFactor);
-        */
 
         // first, the bounding box
         painter.setOpacity(0.8);
         painter.setPen(QPen(Qt::red, 2, Qt::DashDotDotLine));
-        // painter.drawRect(this->ObjectROI);
         painter.drawRect(modifiedROI);
     }
+    */
 
     // that's all... at least before we add some additional layers
     painter.end();
@@ -588,6 +595,75 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     // signal that something has changed
     emit updateSignal();
 }
+
+
+
+
+
+
+
+void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
+{
+    // avoid some annoying warnings
+    if (this->BoundingBoxesImage.size()==QSize(0,0))
+        return;
+
+
+    // taking account of lines width to create a local ROI
+    int adj = 2;
+    if (this->scaleFactor>1.)
+        adj *= this->scaleFactor;
+
+    QRect localROI = ROI.adjusted(-adj, -adj, adj, adj);
+
+    // defining the original area covered by the paint event, so that we can avoid re-drawing objects that are out of scope
+    QRect origImgRect = QRect(localROI.topLeft()/this->scaleFactor, localROI.size()/this->scaleFactor);
+
+
+    // initiating the QPainter
+    QPainter painter(&(this->BoundingBoxesImage));
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);    // ensure that filling with transparent data will indeed fill with transparent
+
+    // erase what's inside the ROI
+    painter.fillRect(localROI, Qt::transparent);
+
+    // now ensure that what we're painting now will add something
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+    // now displaying the bounding boxes
+    const std::vector<int>& currFrameObjects = this->annotations->getObjectsListOnCurrentFrame();
+
+    for (size_t k=0; k<currFrameObjects.size(); k++)
+    {
+        QRect currBB = QtCvUtils::cvRect2iToQRect( this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).BoundingBox );
+
+        if (origImgRect.intersects(currBB))
+        {
+            int currClass = this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ClassId;
+
+            QColor rightColor = QtCvUtils::cvVec3bToQColor(this->annotations->getConfig().getProperty(currClass).displayRGBColor, 255);
+            // setting the right color
+
+            if (currFrameObjects[k] == this->selectedObjectId)
+            {
+                painter.setPen(QPen(rightColor, 2, Qt::DashDotDotLine));
+                painter.setOpacity(1.);
+            }
+            else
+            {
+                painter.setPen(QPen(rightColor, 1, Qt::DashLine));
+                painter.setOpacity(0.7);
+            }
+
+            painter.drawRect(this->adaptToScaleMul(currBB));
+        }
+    }
+
+    painter.end();
+}
+
+
+
 
 /*
 void AnnotateArea::resizeEvent(QResizeEvent *event)
@@ -715,6 +791,9 @@ void AnnotateArea::updatePaintImage(const QRect& ROI)
 // just a small function to translate from original size QRect objects to scaled (adapted to the zoom) QRect objects
 QRect AnnotateArea::adaptToScaleMul(const QRect& rect) const
 {
+    // a small notice about this function
+    // at first, I had
+
     if (this->scaleFactor>1.)
     {
         // if we're in "zoom" mode, we need to switch to integers. Rounding tends to cause problems

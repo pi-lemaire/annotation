@@ -79,7 +79,10 @@ MainWindow::MainWindow()
 
     // specify that the widget size can change...
     this->annotateScrollArea->setWidgetResizable(true);
+    // this->annotateScrollArea->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
     this->annotateScrollArea->setWidget(this->annotateArea);
+
+
 
     // this is for window-related stuff
     setCentralWidget(this->annotateScrollArea);
@@ -162,6 +165,44 @@ void MainWindow::updateActionsAvailability()
         case AA_CS_square: this->penStyleSquareAct->setChecked(true); break;
     }
 }
+
+
+
+
+void MainWindow::imageSizeAdjustedByFactor(float factor)
+{
+    /*
+    int hScrollValue = this->annotateScrollArea->horizontalScrollBar()->value();
+    int vScrollValue = this->annotateScrollArea->verticalScrollBar()->value();
+    */
+    //int prevHMiddlePos = this->annotateArea->size().width() / (factor * 2.);
+    //int prevVMiddlePos = this->annotateArea->size().height() / (factor * 2.);
+
+    // the theoretical position of the scroll area center within the image
+    int prevHMiddlePos = this->knownHScrollValue + (this->annotateScrollArea->size().width() / 2);
+    int prevVMiddlePos = this->knownVScrollValue + (this->annotateScrollArea->size().height() / 2);
+
+    // the new position of the center
+    int newHMiddlePos = factor * prevHMiddlePos;
+    int newVMiddlePos = factor * prevVMiddlePos;
+
+    // set the scrollbars to the position of the top left corner according to this theoretical center pos :
+    this->annotateScrollArea->horizontalScrollBar()->setValue(newHMiddlePos - (this->annotateScrollArea->size().width() / 2));
+    this->annotateScrollArea->verticalScrollBar()->setValue(newVMiddlePos - (this->annotateScrollArea->size().height() / 2));
+
+    /*
+    QSize newWidgetSizeValue = this->annotateArea->size();
+    QSize scrollAreaSizeValue = this->annotateScrollArea->size();
+
+
+
+    qDebug() << "resize called : factor=" << factor << " ; hscroll=" << hScrollValue << " ; vscroll=" << vScrollValue << " ; newsize=" << newWidgetSizeValue << " ; scrollSize=" << scrollAreaSizeValue;
+    */
+}
+
+
+
+
 
 
 void MainWindow::openImage()
@@ -338,7 +379,8 @@ void MainWindow::setZoomToOne()
 void MainWindow::increaseZoom()
 {
     float mulFactor, maxZoom;
-    if (this->annotateArea->getScale()>=1.)
+    float prevScale = this->annotateArea->getScale();
+    if (prevScale>=1.)
     {
         mulFactor = 2.; maxZoom = 16.;
     }
@@ -347,13 +389,26 @@ void MainWindow::increaseZoom()
         mulFactor = 1.5; maxZoom = 1.;
     }
 
-    this->annotateArea->setScale(QtCvUtils::getMin(this->annotateArea->getScale()*mulFactor, maxZoom));
+    float newScale = QtCvUtils::getMin(this->annotateArea->getScale()*mulFactor, maxZoom);
+
+    if (newScale == prevScale)
+        return;
+
+    // we store the H scroll values and the V scroll values for smoother scrollarea behaviour
+    // (changing the size of the object may affect them)
+    this->knownHScrollValue = this->annotateScrollArea->horizontalScrollBar()->value();
+    this->knownVScrollValue = this->annotateScrollArea->verticalScrollBar()->value();
+
+    this->annotateArea->setScale(newScale);
+
+    this->imageSizeAdjustedByFactor(newScale / prevScale);
 }
 
 void MainWindow::decreaseZoom()
 {
     float divFactor, minZoom;
-    if (this->annotateArea->getScale()>1.)
+    float prevScale = this->annotateArea->getScale();
+    if (prevScale>1.)
     {
         divFactor = 2.; minZoom = 1.;
     }
@@ -361,7 +416,20 @@ void MainWindow::decreaseZoom()
     {
         divFactor = 1.5; minZoom = 0.1;
     }
-    this->annotateArea->setScale(QtCvUtils::getMax(this->annotateArea->getScale()/divFactor, minZoom));
+
+    float newScale = QtCvUtils::getMax(this->annotateArea->getScale()/divFactor, minZoom);
+
+    if (newScale == prevScale)
+        return;
+
+    // we store the H scroll values and the V scroll values for smoother scrollarea behaviour
+    // (changing the size of the object may affect them)
+    this->knownHScrollValue = this->annotateScrollArea->horizontalScrollBar()->value();
+    this->knownVScrollValue = this->annotateScrollArea->verticalScrollBar()->value();
+
+    this->annotateArea->setScale(newScale);
+
+    this->imageSizeAdjustedByFactor(newScale / prevScale);
 }
 
 

@@ -82,6 +82,8 @@ public slots:
     void selectAnnot(int);
     void updateActionsAvailability();
 
+
+
 private slots:
     void openImage();
     void openVideo();
@@ -113,9 +115,15 @@ private:
     bool maybeSave();
     bool saveFile(const QByteArray &fileFormat);
 
+    void imageSizeAdjustedByFactor(float);
+
 
     AnnotateArea *annotateArea;
     QScrollArea *annotateScrollArea;
+
+    int knownHScrollValue, knownVScrollValue;
+
+
 
     DialogClassSelection *classSelection;
     AnnotationsBrowser *annotsBrowser;

@@ -364,9 +364,13 @@ public:
     const cv::Mat& getAnnotationsClasses(int id) const;
     const cv::Mat& getAnnotationsIds(int id) const;
 
+
+
+
     // get the object Id (within the record) to which the pixel (x,y) belongs in the current image
     int getObjectIdAtPosition(int x, int y) const;
 
+    const std::vector<int>& getObjectsListOnCurrentFrame() const { return this->annotsRecord.getFrameContentIds(this->currentImgIndex); }
 
     int getCurrentFramePosition() const { return this->currentImgIndex; }
 

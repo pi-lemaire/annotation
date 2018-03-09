@@ -784,6 +784,13 @@ cv::Mat& AnnotationsSet::accessCurrentAnnotationsIds()
 
 
 
+
+
+
+
+
+
+
 bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
 {
     // load the file

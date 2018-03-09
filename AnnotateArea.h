@@ -127,6 +127,7 @@ public slots:
 signals:
     void selectedObject(int);
     void updateSignal();
+    void sizeChangedByFactor(float);
 
 
 protected:
@@ -148,6 +149,11 @@ private:
     QPoint adaptToScaleDiv(const QPoint&) const;
 
 
+    void setWidgetSize(const QSize&);
+
+    void drawBoundingBoxes(const QRect& ROI=QRect(-3, -3, 0, 0));
+
+
     // bool modified;
     bool scribbling, rubberMode;
     int myPenWidth;
@@ -156,7 +162,7 @@ private:
 
     cursorShape myPenShape;
 
-    QImage PaintingImage, BackgroundImage, ObjectImage;
+    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage;
     QRect ObjectROI;
 
     float scaleFactor;
