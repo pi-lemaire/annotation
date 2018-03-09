@@ -443,7 +443,8 @@ void AnnotationsRecord::clearFrame(int frameId)
 void AnnotationsRecord::mergeIntraFrameAnnotationsTo(const std::vector<int>& annotsList, int newClassId, int newObjectId)
 {
     // set newClassId and newObjectId to the first element in annotsList
-    // update its bounding box so that it includes all of the bounding box of the annotsList objects.
+    // update its bounding box so that it includes all of the bounding box of the annotsList objects
+    // this function doesn't delete
 
     if (annotsList.size()<1)
         return;
@@ -2105,7 +2106,182 @@ void AnnotationsSet::separateAnnotations(const std::vector<int>& separateList)
 
 
 
+void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList, int classId)
+{
+    // well, there are 2 rather different cases for this functionnality
+    // 1. the class pointed with classId is uniform : this means that we must merge all of the objects
+    // in a single frame to only one object, and perhaps even merge it with an already present one
+    // 2. the class is made of multiple objects : this case is simpler, we create a new object everytime
 
+    // stores the original data and make a copy of the IDs that we will send to the record
+    // in return, the record will provide us back with a list of the new object IDs corresponding to the passed argument vector
+    vector<Point2i> frameAndIdSwList;
+
+    for (size_t k=0; k<switchList.size(); k++)
+    {
+        if (switchList[k]<0 || switchList[k]>=(int)this->annotsRecord.getRecord().size())
+            continue;
+
+        if (this->annotsRecord.getAnnotationById(switchList[k]).ClassId != classId)
+        {
+            frameAndIdSwList.push_back(Point2i(this->annotsRecord.getAnnotationById(switchList[k]).FrameNumber, switchList[k]));
+        }
+    }
+
+    // sort according to the frames
+    vector<size_t> orderedFrames = AnnotationUtilities::sortP2iIndexes(frameAndIdSwList);
+
+    // do a list of frames that we want to process, and their associated indexes
+    vector<int> listFrames;
+    vector<vector<int>> correspondingIdsList;
+    int currListFramesIndex = -1;
+
+    // start with some impossible index
+    int prevFrame = -1;
+
+    for (size_t k=0; k<orderedFrames.size(); k++)
+    {
+        int currFrame = frameAndIdSwList[orderedFrames[k]].x;
+
+        if (currFrame!=prevFrame)
+        {
+            listFrames.push_back(currFrame);
+            correspondingIdsList.push_back(vector<int>());
+            currListFramesIndex++;
+        }
+
+        correspondingIdsList[currListFramesIndex].push_back(frameAndIdSwList[orderedFrames[k]].y);
+
+        prevFrame = currFrame;
+    }
+
+
+
+    // keep a track of indices that we will need to delete - this vector will be filled only if the class we will set
+    // existing annotations to is uniform
+    vector<int> deleteIndices;
+    vector<AnnotationObject> oldObjectsCharacsList;  // oldObjectsCaracs stores the objects characteristics before we modify it into annotsRecord
+    vector<int> newObjectIds;
+
+    // now handling every frame separately
+    for (size_t fr=0; fr<listFrames.size(); fr++)
+    {
+        int frameNumber = listFrames[fr];
+
+        // load the images that we will need to modify
+        // prepare the image to be modified - we only need to modify the object ids mat
+        Mat imToModifyObjIds, imToModifyClasses;
+
+        string imgFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName), frameNumber);
+
+
+        // is it in the buffer?
+        if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+        {
+            this->annotationsClassesBuffer[frameNumber%this->bufferLength].copyTo(imToModifyClasses);
+            this->annotationsIdsBuffer[frameNumber%this->bufferLength].copyTo(imToModifyObjIds);
+        }
+        else
+        {
+            // load the images if available
+            this->loadAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+        }
+
+        // oldObjectsCharacsList is a frame dependent vector
+        oldObjectsCharacsList.clear();
+        newObjectIds.clear();
+
+
+
+
+        if (this->config.getProperty(classId).classType == _ACT_Uniform)
+        {
+            // case one : it's a uniform class ID - we merge it to one single object
+            // - perhaps we even need to merge it to an already existing object
+
+            int newObjectId = 0;    // this id is fixed anyway
+
+            // looking for a previously recorded object?
+            int alreadyExistingId = this->annotsRecord.searchAnnotation(frameNumber, classId, newObjectId);
+            if (alreadyExistingId != -1)
+                // found one ! add it at the beginning of the stack
+                correspondingIdsList[fr].insert(correspondingIdsList[fr].begin(), alreadyExistingId);
+
+            // don't forget to add merged items to the delete list - we will only keep the first one
+            // store their old characs as well
+            for (size_t ob=1; ob<correspondingIdsList[fr].size(); ob++)
+            {
+                deleteIndices.push_back(correspondingIdsList[fr][ob]);
+                oldObjectsCharacsList.push_back(this->annotsRecord.getAnnotationById(correspondingIdsList[fr][ob]));
+                newObjectIds.push_back(newObjectId);
+            }
+
+            // call the merging procedure from the record
+            this->annotsRecord.mergeIntraFrameAnnotationsTo(correspondingIdsList[fr], classId, newObjectId);
+
+            // the images modifications will happen later
+        }
+        else
+        {
+            // we will attribute a new record ID to every element
+            for (size_t ob=0; ob<correspondingIdsList[fr].size(); ob++)
+            {
+                int newObjectId = this->annotsRecord.getFirstAvailableObjectId(classId);
+
+                // store the changes for when we will actually modify the concerned images
+                oldObjectsCharacsList.push_back(this->annotsRecord.getAnnotationById(correspondingIdsList[fr][ob]));
+                newObjectIds.push_back(newObjectId);
+
+                // create an one-sized vector so that we can call the merge procedure instead of creating a new one
+                vector<int> modifVec;
+                modifVec.push_back(correspondingIdsList[fr][ob]);
+                this->annotsRecord.mergeIntraFrameAnnotationsTo(modifVec, classId, newObjectId);
+
+                // that's as simple as that - now go to the image modification
+            }
+        }
+
+
+        if ((!imToModifyClasses.data) || (!imToModifyObjIds.data))
+            continue;   // no data available, just continue...
+
+
+        // alright, the record has been modified, now fix the image
+        for (size_t k=0; k<oldObjectsCharacsList.size(); k++)
+        {
+            const AnnotationObject& oldAnnot=oldObjectsCharacsList[k];
+
+            for (int i=oldAnnot.BoundingBox.tl().y; i<oldAnnot.BoundingBox.br().y; i++)
+            {
+                for (int j=oldAnnot.BoundingBox.tl().x; j<oldAnnot.BoundingBox.br().x; j++)
+                {
+                    if ( (imToModifyClasses.at<int16_t>(i,j)==oldAnnot.ClassId) && (imToModifyObjIds.at<int32_t>(i,j)==oldAnnot.ObjectId))
+                    {
+                        // found a pixel!
+                        imToModifyClasses.at<int16_t>(i,j) = classId;
+                        imToModifyObjIds.at<int32_t>(i,j) = newObjectIds[k];
+                    }
+                }
+            }
+        }
+
+
+        // finally store the result
+        this->saveAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+
+        // copy back the data to the buffer in case it was already buffered
+        if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+        {
+            imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
+            imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
+        }
+
+    }
+
+
+    // don't forget to remove now useless items
+    this->annotsRecord.deleteAnnotationsGroup(deleteIndices);
+}
 
 
 

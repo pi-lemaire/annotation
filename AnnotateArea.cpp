@@ -82,7 +82,7 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent)
     this->myPenShape = AA_CS_round;
 
     this->setPenWidth(10);
-    //this->myPenColor = Qt::blue;
+
     // selecting the first available class
     this->selectClassId(1);
     this->selectedObjectId = -1;
@@ -97,6 +97,10 @@ bool AnnotateArea::openImage(const QString &fileName)
         return false;
 
     this->reload();
+
+    this->updatePaintImage();
+
+    this->selectAnnotation(-1);
 
     return true;
 }
@@ -374,7 +378,7 @@ void AnnotateArea::selectAnnotation(int annotId)
     }
 
     // update the part containing both the old and the new ROI
-    this->update( this->adaptToScale(updateRoi.adjusted(-2,-2,2,2)) );
+    this->update( this->adaptToScaleMul(updateRoi.adjusted(-2,-2,2,2)) );
 
     emit selectedObject(annotId);
 }
@@ -388,7 +392,7 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton)
     {
         // the user starts drawing something with his left button.. store the position and record the status
-        this->lastPoint = event->pos() / this->scaleFactor;
+        this->lastPoint = this->adaptToScaleDiv(event->pos());
         this->firstAnnotPoint = this->lastPoint;
         this->scribbling = true;
 
@@ -403,7 +407,7 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
         // remove the displayed part corresponding to the previous ROI
         QRect previousROI = this->ObjectROI;
         this->ObjectROI = QRect(-3, -3, 0, 0);
-        this->update( this->adaptToScale(previousROI.adjusted(-2, -2, 2, 2)) );
+        this->update( this->adaptToScaleMul(previousROI.adjusted(-2, -2, 2, 2)) );
 
         // start recording the right ROI
         this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
@@ -416,7 +420,7 @@ void AnnotateArea::mouseMoveEvent(QMouseEvent *event)
 {
     // the mouse has moved, we record it and paint the content straight away
     if ((event->buttons() & Qt::LeftButton) && this->scribbling)
-        this->drawLineTo(event->pos() / this->scaleFactor);
+        this->drawLineTo(this->adaptToScaleDiv(event->pos()));
 }
 
 
@@ -426,7 +430,7 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && this->scribbling)
     {
         // left mouse button released : end annotating, draw the last bits
-        this->drawLineTo(event->pos() / this->scaleFactor);
+        this->drawLineTo( this->adaptToScaleDiv(event->pos()) );
         this->scribbling = false;
 
         // compute the ROI
@@ -477,13 +481,13 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
 
 
         // update the corresponding image content
-        this->update( this->adaptToScale(this->ObjectROI.adjusted(-2, -2, 2, 2)) );
+        this->update( this->adaptToScaleMul(this->ObjectROI.adjusted(-2, -2, 2, 2)) );
     }
 
     else if (event->button() == Qt::RightButton)
     {
         // no annotation, but an object selection
-        QPoint actualPos = event->pos() / this->scaleFactor;
+        QPoint actualPos = this->adaptToScaleDiv(event->pos());
 
         // find the right annotation at the place where we clicked
         this->selectedObjectId = this->annotations->getObjectIdAtPosition(actualPos.x(), actualPos.y());
@@ -506,12 +510,37 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     // either it's external, thus it's related to the scaled version of the image (what's visible of the widget),
     // either it's internal, but we had to adapt to the external version, thus all the systematic calls to adaptToScale()
     QRect dirtyRect = event->rect();
+
+    //qDebug() << "dirtyRect :" << dirtyRect;
+
+    /*
+    dirtyRect.setTopLeft(this->adaptToScaleDiv(dirtyRect.topLeft()));
+    dirtyRect.setBottomRight(this->adaptToScaleDiv(dirtyRect.bottomRight()));
+    */
+
+    // use ceil and floor to ensure that the desired area is well included
+    dirtyRect.setTop( floor((float)dirtyRect.top() / this->scaleFactor) );
+    dirtyRect.setLeft( floor((float)dirtyRect.left() / this->scaleFactor) );
+    dirtyRect.setRight( ceil((float)dirtyRect.right() / this->scaleFactor) );
+    dirtyRect.setBottom( ceil((float)dirtyRect.bottom() / this->scaleFactor) );
+
+    // this is the concerned area in the original image
+    QRect origImgArea = dirtyRect;
+
+    // setting "dirtyRect", aka the region where we want to modify stuff, to the area concerned within the widget
+    dirtyRect = this->adaptToScaleMul(dirtyRect);
+
+
+    //qDebug() << "dirtyRect :" << dirtyRect << " ; origImgArea : " << origImgArea;
+
+    /*
     dirtyRect.setTop(floor(dirtyRect.top() / this->scaleFactor) * this->scaleFactor);
     dirtyRect.setLeft(floor(dirtyRect.left() / this->scaleFactor) * this->scaleFactor);
     dirtyRect.setRight(ceil(dirtyRect.right() / this->scaleFactor) * this->scaleFactor);
     dirtyRect.setBottom(ceil(dirtyRect.bottom() / this->scaleFactor) * this->scaleFactor);
+    */
 
-    QRect origImgArea = QRect(dirtyRect.topLeft() / this->scaleFactor, dirtyRect.bottomRight() / this->scaleFactor);
+    // QRect origImgArea = QRect(dirtyRect.topLeft() / this->scaleFactor, dirtyRect.bottomRight() / this->scaleFactor);
 
     // qDebug() << "dirtyRect is " << dirtyRect;
 
@@ -526,16 +555,25 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     // painter.drawImage(dirtyRect, this->PaintingImage.scaled(this->BackgroundImage.size() * this->scaleFactor), dirtyRect);
     painter.drawImage(dirtyRect.topLeft(), this->PaintingImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
 
+    /*
+    qDebug() << "background image subset size : " << this->BackgroundImage.copy(origImgArea).size()
+             << "after painting it : " << this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding).size()
+             << "area where we paint it : " << dirtyRect;
+             */
+
+
+
     // display the selected object
     if (!this->scribbling && this->selectedObjectId != -1)
     {
         // grab the object ROI within the record
         this->ObjectROI = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox);
 
-        QRect modifiedROI;
-        modifiedROI.setTopLeft(this->ObjectROI.topLeft() * this->scaleFactor);
+        QRect modifiedROI = this->adaptToScaleMul(this->ObjectROI);
+        /*
+        modifiedROI.setTopLeft( this->adapt this->ObjectROI.topLeft() * this->scaleFactor);
         modifiedROI.setBottomRight(this->ObjectROI.bottomRight() * this->scaleFactor);
-
+        */
 
         // first, the bounding box
         painter.setOpacity(0.8);
@@ -580,15 +618,15 @@ void AnnotateArea::drawLineTo(const QPoint &endPoint)
     if (this->rubberMode)
     {
         painter.setCompositionMode(QPainter::CompositionMode_Clear);    // this mode erases what was before - this is exactly what we are looking for
-        painter.setPen(QPen(Qt::transparent, this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
+        painter.setPen(QPen(Qt::transparent, (int)this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
     }
     else
     {
-        painter.setPen(QPen(this->myPenColor, this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
+        painter.setPen(QPen(this->myPenColor, (int)this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
     }
 
     QPainter objectPainter(&(this->ObjectImage));
-    objectPainter.setPen(QPen(Qt::black, this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
+    objectPainter.setPen(QPen(Qt::black, (int)this->myPenWidth / this->scaleFactor, Qt::SolidLine, capStyle, joinStyle));
 
 
     // Qt doesn't draw lines when the starting point is identical to the end point
@@ -611,8 +649,8 @@ void AnnotateArea::drawLineTo(const QPoint &endPoint)
 
     // updating only the right region
     int rad = (this->myPenWidth / (2 * this->scaleFactor)) + 2;
-    this->update( this->adaptToScale(QRect(this->lastPoint, endPoint).normalized()
-                                           .adjusted(-rad, -rad, +rad, +rad)) );
+    this->update( this->adaptToScaleMul(QRect(this->lastPoint, endPoint).normalized()
+                                                .adjusted(-rad, -rad, +rad, +rad)) );
     this->lastPoint = endPoint;
 }
 
@@ -675,9 +713,29 @@ void AnnotateArea::updatePaintImage(const QRect& ROI)
 
 
 // just a small function to translate from original size QRect objects to scaled (adapted to the zoom) QRect objects
-QRect AnnotateArea::adaptToScale(const QRect& rect) const
+QRect AnnotateArea::adaptToScaleMul(const QRect& rect) const
 {
-    return QRect(rect.topLeft()*this->scaleFactor, rect.bottomRight()*this->scaleFactor);
+    if (this->scaleFactor>1.)
+    {
+        // if we're in "zoom" mode, we need to switch to integers. Rounding tends to cause problems
+        int iScaleFactor = round(this->scaleFactor);
+        return QRect(rect.topLeft()*iScaleFactor, rect.size()*iScaleFactor);
+    }
+
+    return QRect(rect.topLeft()*this->scaleFactor, rect.size()*this->scaleFactor);
+}
+
+
+QPoint AnnotateArea::adaptToScaleDiv(const QPoint& point) const
+{
+    if (this->scaleFactor>1.)
+    {
+        // if we're in "zoom" mode, we need to switch to integers. Rounding tends to cause problems
+        int iScaleFactor = round(this->scaleFactor);
+        return QPoint( (int)(point.x() / iScaleFactor), (int)(point.y() / iScaleFactor) );
+    }
+
+    return (point / this->scaleFactor);
 }
 
 

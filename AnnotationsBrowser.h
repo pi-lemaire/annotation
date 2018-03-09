@@ -18,18 +18,6 @@ struct annotSelection
 };
 
 
-/*
-namespace annotsBrowserUtilities
-{
-    inline void sortSelections(std::vector<annotSelection> &v)
-    {
-        // sort indexes based on comparing values in v
-        sort( v.begin(), v.end(),
-             [&v](size_t i1, size_t i2) {return ((v[i1].classId<v[i2].classId) || (v[i1].classId==v[i2].classId && v[i1].objectId<v[i2].objectId));} );
-    }
-}
-*/
-
 
 
 
@@ -44,12 +32,13 @@ public:
 
 public slots:
     void updateBrowser(int);    // the int corresponds to the selected annotation // -1 means none selected
-
+    void setClassSelected(int); // this is useful for this object to know which class is selected, for the "switch" functionnality
 
 private slots:
     void GroupAnnotationsClicked();
     void SeparateAnnotationsClicked();
     void DeleteAnnotationsClicked();
+    void SwitchAnnotationsClassClicked();
     void BrowserLinkClicked(const QUrl&);
 
 
@@ -61,13 +50,17 @@ signals:
 private:
     void setButtonsActivation();
 
-    QPushButton *buttonGroupAnnotations, *buttonSeparateAnnotations, *buttonDeleteAnnotations;
+    std::vector<int> getCheckedRecordIds() const;
+
+    QPushButton *buttonGroupAnnotations, *buttonSeparateAnnotations, *buttonDeleteAnnotations, *buttonSwitchAnnotationsClass;
     QGridLayout *browserLayout;
     QTextBrowser *browser;
 
     AnnotationsSet *annots;
 
     int currentAnnotSelected;
+
+    int currentClassSelected;
 
     std::vector<annotSelection> linesChecked;
 };

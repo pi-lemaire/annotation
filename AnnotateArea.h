@@ -144,7 +144,8 @@ private:
     void updatePaintImage(const QRect& ROI=QRect(-3, -3, 0, 0));
 
 
-    QRect adaptToScale(const QRect&) const;
+    QRect adaptToScaleMul(const QRect&) const;
+    QPoint adaptToScaleDiv(const QPoint&) const;
 
 
     // bool modified;

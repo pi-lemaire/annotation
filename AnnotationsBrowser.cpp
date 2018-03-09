@@ -16,13 +16,15 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     this->buttonGroupAnnotations = new QPushButton(tr("&Group", "Annotations Browser"));
     this->buttonSeparateAnnotations = new QPushButton(tr("S&eparate", "Annotation Browser"));
     this->buttonDeleteAnnotations = new QPushButton(tr("&Delete", "Annotation Browser"));
+    this->buttonSwitchAnnotationsClass = new QPushButton(tr("S&witch Class", "Annotation Browser"));
 
     // then the layout
     this->browserLayout = new QGridLayout;
-    this->browserLayout->addWidget(this->browser, 0, 0, 1, 3);
+    this->browserLayout->addWidget(this->browser, 0, 0, 1, 4);
     this->browserLayout->addWidget(this->buttonGroupAnnotations, 1, 0, 1, 1);
     this->browserLayout->addWidget(this->buttonSeparateAnnotations, 1, 1, 1, 1);
     this->browserLayout->addWidget(this->buttonDeleteAnnotations, 1, 2, 1, 1);
+    this->browserLayout->addWidget(this->buttonSwitchAnnotationsClass, 1, 3, 1, 1);
 
     // set the layout as the main thing
     this->setLayout(this->browserLayout);
@@ -31,11 +33,13 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     QObject::connect(this->buttonGroupAnnotations, SIGNAL(clicked()), this, SLOT(GroupAnnotationsClicked()));
     QObject::connect(this->buttonSeparateAnnotations, SIGNAL(clicked()), this, SLOT(SeparateAnnotationsClicked()));
     QObject::connect(this->buttonDeleteAnnotations, SIGNAL(clicked()), this, SLOT(DeleteAnnotationsClicked()));
+    QObject::connect(this->buttonSwitchAnnotationsClass, SIGNAL(clicked()), this, SLOT(SwitchAnnotationsClassClicked()));
 
     // connect the browser
     QObject::connect(this->browser, SIGNAL(anchorClicked(QUrl)), this, SLOT(BrowserLinkClicked(QUrl)));
 
     this->updateBrowser(-1);
+    this->currentClassSelected = 1; // default class selected
 }
 
 
@@ -44,6 +48,12 @@ AnnotationsBrowser::~AnnotationsBrowser()
 
 }
 
+
+void AnnotationsBrowser::setClassSelected(int whichClass)
+{
+    this->currentClassSelected = whichClass;
+    this->setButtonsActivation();
+}
 
 
 
@@ -189,13 +199,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
 
 void AnnotationsBrowser::GroupAnnotationsClicked()
 {
-    std::vector<int> listIds;
-    for (size_t k=0; k<this->linesChecked.size(); k++)
-    {
-        listIds.push_back(this->linesChecked[k].recordId);
-    }
-
-    this->annots->mergeAnnotations(listIds);
+    this->annots->mergeAnnotations(this->getCheckedRecordIds());
 
     this->linesChecked.clear();
 
@@ -206,11 +210,7 @@ void AnnotationsBrowser::GroupAnnotationsClicked()
 
 void AnnotationsBrowser::SeparateAnnotationsClicked()
 {
-    std::vector<int> listIds;
-    for (size_t k=0; k<this->linesChecked.size(); k++)
-        listIds.push_back(this->linesChecked[k].recordId);
-
-    this->annots->separateAnnotations(listIds);
+    this->annots->separateAnnotations(this->getCheckedRecordIds());
 
     this->linesChecked.clear();
 
@@ -224,11 +224,7 @@ void AnnotationsBrowser::SeparateAnnotationsClicked()
 
 void AnnotationsBrowser::DeleteAnnotationsClicked()
 {
-    std::vector<int> listIds;
-    for (size_t k=0; k<this->linesChecked.size(); k++)
-        listIds.push_back(this->linesChecked[k].recordId);
-
-    this->annots->deleteAnnotations(listIds);
+    this->annots->deleteAnnotations(this->getCheckedRecordIds());
 
     this->linesChecked.clear();
 
@@ -237,6 +233,17 @@ void AnnotationsBrowser::DeleteAnnotationsClicked()
     emit annotationSelected(-1);
 }
 
+
+void AnnotationsBrowser::SwitchAnnotationsClassClicked()
+{
+    this->annots->switchAnnotationsToClass(this->getCheckedRecordIds(), this->currentClassSelected);
+
+    this->linesChecked.clear();
+
+    emit changesCausedByTheBrowser();
+
+    emit annotationSelected(-1);
+}
 
 
 
@@ -301,10 +308,25 @@ void AnnotationsBrowser::setButtonsActivation()
     // by default
     this->buttonGroupAnnotations->setEnabled(false);
     this->buttonSeparateAnnotations->setEnabled(false);
+    this->buttonSwitchAnnotationsClass->setEnabled(false);
+
 
     // no deletion available if no line is checked
     this->buttonDeleteAnnotations->setEnabled(this->linesChecked.size()>0);
 
+
+    // check if some checked object can change class
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        if (linesChecked[k].classId != this->currentClassSelected)
+        {
+            this->buttonSwitchAnnotationsClass->setEnabled(true);
+            break;
+        }
+    }
+
+
+    // check if the group or separate functionnalities can be used
     if (this->linesChecked.size()>1)
     {
         // group is available only if at least 2 objects of the same class are active
@@ -319,10 +341,29 @@ void AnnotationsBrowser::setButtonsActivation()
 
         annotSelection prevAnnot = checkedCopies[0];
 
+        // trueNumber is some kind of bitwise object to prevent us from spending t
         char trueNumber = 0;
+        const char trueNumberGoal = 1+2;
+
+        /*
+        if (prevAnnot.classId != this->currentClassSelected)
+        {
+            this->buttonSwitchAnnotationsClass->setEnabled(true);
+            trueNumber = 4;
+        }
+        */
 
         for (size_t k=1; k<checkedCopies.size(); k++)
         {
+            /*
+            if (checkedCopies[k].classId != this->currentClassSelected)
+            {
+                // some checked object is from a different class than the one selected
+                this->buttonSwitchAnnotationsClass->setEnabled(true);
+                trueNumber |= 4;
+            }
+            */
+
             if ( (checkedCopies[k].classId == prevAnnot.classId)
                  && (this->annots->accessConfig().getProperty(prevAnnot.classId).classType != _ACT_Uniform) )
             {
@@ -340,7 +381,8 @@ void AnnotationsBrowser::setButtonsActivation()
                     trueNumber |= 2;
                 }
 
-                if (trueNumber == 3)
+
+                if (trueNumber == trueNumberGoal)
                     // both buttons are already set to true, no need to go further
                     break;
             }
@@ -354,6 +396,14 @@ void AnnotationsBrowser::setButtonsActivation()
 
 
 
+
+std::vector<int> AnnotationsBrowser::getCheckedRecordIds() const
+{
+    std::vector<int> listIds;
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+        listIds.push_back(this->linesChecked[k].recordId);
+    return listIds;
+}
 
 
 

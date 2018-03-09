@@ -297,7 +297,9 @@ public:
 
 
     void mergeIntraFrameAnnotationsTo(const std::vector<int>& annotsList, int newClassId, int newObjectId);
-    void deleteAnnotationsGroup(const std::vector<int>& deleteList);    // delete the annotations which record Ids are included in the deleteList
+                                                                                    // merges all the annotations of a single frame into one and gives them the newClassId and ObjectId
+                                                                                    // data    /!\ doesn't delete the now (supposedly) useless merged data
+    void deleteAnnotationsGroup(const std::vector<int>& deleteList);                // delete the annotations which record Ids are included in the deleteList
     std::vector<int> separateAnnotations(const std::vector<int>& separateList);     // the concept here is to dissociate annotations that are the same object (class and object id)
                                                                                     // but on different frames - returns the ids of objects which objectId has changed
 
@@ -436,6 +438,9 @@ public:
             // one of the separated objects keeps the same object id as before : it's the one that appears first in the list
             // (maybe the one that has been checked first in the browser?)
 
+    void switchAnnotationsToClass(const std::vector<int>& switchList, int classId);
+            // changes the classes of the selected objects (when they don't already belong to this class)
+            // Creates new objects in the selected class when the class is not uniform
 
 
 

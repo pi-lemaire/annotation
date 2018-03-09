@@ -106,6 +106,7 @@ MainWindow::MainWindow()
 
     // connect the class selection and the annotate area
     QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotateArea, SLOT(selectClassId(int)));
+    QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotsBrowser, SLOT(setClassSelected(int)));
 
     QObject::connect(this->annotsBrowser, SIGNAL(annotationSelected(int)), this, SLOT(selectAnnot(int)));
     QObject::connect(this->annotsBrowser, SIGNAL(changesCausedByTheBrowser()), this->annotateArea, SLOT(contentModified()));
