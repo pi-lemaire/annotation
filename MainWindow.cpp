@@ -550,10 +550,9 @@ void MainWindow::createActions()
     this->rubberModeAct->setCheckable(true);
 
 
-    this->clearScreenAct = new QAction(tr("&Clear Screen"), this);
-    this->clearScreenAct->setShortcut(tr("Ctrl+L"));
-    connect(this->clearScreenAct, SIGNAL(triggered()),
-            this->annotateArea, SLOT(clearImage()));
+    this->clearScreenAct = new QAction(tr("&Clear Annotations"), this);
+    //this->clearScreenAct->setShortcut(tr("Ctrl+L"));
+    connect(this->clearScreenAct, SIGNAL(triggered()), this->annotateArea, SLOT(clearImage()));
 
 
 

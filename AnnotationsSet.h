@@ -358,11 +358,13 @@ public:
     const cv::Mat& getCurrentOriginalImg() const;
     const cv::Mat& getCurrentAnnotationsClasses() const;
     const cv::Mat& getCurrentAnnotationsIds() const;
+    const cv::Mat& getCurrentContours() const;
 
     // access any image within the buffer
     const cv::Mat& getOriginalImg(int id) const;
     const cv::Mat& getAnnotationsClasses(int id) const;
     const cv::Mat& getAnnotationsIds(int id) const;
+    const cv::Mat& getContours(int id) const;
 
 
 
@@ -435,7 +437,9 @@ public:
             // we perform the computation only class by class
 
     void deleteAnnotations(const std::vector<int>& annotationsList, bool onlyFromRecord=false);
-            // delete annotations given a list. Doesn't affect the pixels data if onlyFromRecord is set to true (useful
+            // delete annotations given a list. Doesn't affect the pixels data if onlyFromRecord is set to true (useful when called from a merge procedure)
+
+    void clearCurrentFrame();
 
     void separateAnnotations(const std::vector<int>& separateList);
             // separate annotations : gives objects with the same object ID on different frames a separate object ID
@@ -476,10 +480,14 @@ private:
     // used within the class to make easier the modification of both matrices
     cv::Mat& accessCurrentAnnotationsClasses();
     cv::Mat& accessCurrentAnnotationsIds();
+    cv::Mat& accessCurrentContours();
 
 
 
     void mergeIntraFrameAnnotations(int newClassId, int newObjectId, const std::vector<int>& listObjects);
+
+    void computeFrameContours(int frameId=-1, const cv::Rect2i& ROI=cv::Rect2i(-3,-3,0,0));
+
 
 
 
@@ -488,6 +496,7 @@ private:
     std::vector<cv::Mat> originalImagesBuffer;  	// original image, in CV8U_C1 or CV8UC3 (BGR) format
     std::vector<cv::Mat> annotationsClassesBuffer;	// corresponding class for every pixel, in CV_16SC1 format
     std::vector<cv::Mat> annotationsIdsBuffer;		// corresponding object Id for every pixel, in CV_32SC1 format
+    std::vector<cv::Mat> annotationsContoursBuffer; // stores the contours of objects, in CV_8UC1 format - 0 = no contour, anything above = contour
 
     // in order to know where we are within the buffer
     int currentImgIndex;

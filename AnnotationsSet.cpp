@@ -706,6 +706,7 @@ void AnnotationsSet::setDefaultConfig()
     this->originalImagesBuffer = vector<Mat>(this->bufferLength, Mat());
     this->annotationsClassesBuffer = vector<Mat>(this->bufferLength, Mat());
     this->annotationsIdsBuffer = vector<Mat>(this->bufferLength, Mat());
+    this->annotationsContoursBuffer = vector<Mat>(this->bufferLength, Mat());
 }
 
 
@@ -734,6 +735,11 @@ const cv::Mat& AnnotationsSet::getCurrentAnnotationsIds() const
     return this->getAnnotationsIds(this->currentImgIndex);
 }
 
+const cv::Mat& AnnotationsSet::getCurrentContours() const
+{
+    return this->getContours(this->currentImgIndex);
+}
+
 
 
 
@@ -751,6 +757,13 @@ const cv::Mat& AnnotationsSet::getAnnotationsIds(int id) const
 {
     return this->annotationsIdsBuffer[id % this->bufferLength];
 }
+
+const cv::Mat& AnnotationsSet::getContours(int id) const
+{
+    return this->annotationsContoursBuffer[id % this->bufferLength];
+}
+
+
 
 
 
@@ -778,6 +791,11 @@ cv::Mat& AnnotationsSet::accessCurrentAnnotationsClasses()
 cv::Mat& AnnotationsSet::accessCurrentAnnotationsIds()
 {
     return this->annotationsIdsBuffer[this->currentImgIndex % this->bufferLength];
+}
+
+cv::Mat& AnnotationsSet::accessCurrentContours()
+{
+    return this->annotationsContoursBuffer[this->currentImgIndex % this->bufferLength];
 }
 
 
@@ -817,16 +835,19 @@ bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
         this->originalImagesBuffer[k].release();
         this->annotationsClassesBuffer[k].release();
         this->annotationsIdsBuffer[k].release();
+        this->annotationsContoursBuffer[k].release();
     }
 
     // then fill the data correctly
     im.copyTo(this->originalImagesBuffer[0]);
     this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
     this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
+    this->annotationsContoursBuffer[0] = Mat::zeros(im.size(), CV_8UC1);
 
     // try to load a previously recorded annotation, if it exists
-    if (this->loadCurrentAnnotationImage())
-        cout << "we were able to load a previous annotation" << endl;
+    // if (this->loadCurrentAnnotationImage())
+        // cout << "we were able to load a previous annotation" << endl;
+    this->loadCurrentAnnotationImage();
 
     // we have loaded a new frame - specify that nothing's changed
     this->changesPerformedUponCurrentAnnot = false;
@@ -867,16 +888,19 @@ bool AnnotationsSet::loadOriginalVideo(const std::string& videoFileName)
         this->originalImagesBuffer[k].release();
         this->annotationsClassesBuffer[k].release();
         this->annotationsIdsBuffer[k].release();
+        this->annotationsContoursBuffer[k].release();
     }
 
     // then fill the data correctly
     im.copyTo(this->originalImagesBuffer[0]);
     this->annotationsClassesBuffer[0] = Mat::zeros(im.size(), CV_16SC1);
     this->annotationsIdsBuffer[0] = Mat::zeros(im.size(), CV_32SC1);
+    this->annotationsContoursBuffer[0] = Mat::zeros(im.size(), CV_8UC1);
 
     // try to load a previously recorded annotation, if it exists
-    if (this->loadCurrentAnnotationImage())
-        cout << "we were able to load a previous annotation" << endl;
+    //if (this->loadCurrentAnnotationImage())
+    //    cout << "we were able to load a previous annotation" << endl;
+    this->loadCurrentAnnotationImage();
 
     // we have loaded a new frame - specify that nothing's changed
     this->changesPerformedUponCurrentAnnot = false;
@@ -926,10 +950,12 @@ bool AnnotationsSet::loadNextFrame()
         im.copyTo(this->originalImagesBuffer[bufferIndex]);
         this->annotationsClassesBuffer[bufferIndex] = Mat::zeros(im.size(), CV_16SC1);
         this->annotationsIdsBuffer[bufferIndex] = Mat::zeros(im.size(), CV_32SC1);
+        this->annotationsContoursBuffer[bufferIndex] = Mat::zeros(im.size(), CV_8UC1);
 
         // try to load a previously recorded annotation, if it exists
-        if (this->loadCurrentAnnotationImage())
-            cout << "we were able to load a previous annotation" << endl;
+        //if (this->loadCurrentAnnotationImage())
+            //cout << "we were able to load a previous annotation" << endl;
+        this->loadCurrentAnnotationImage();
 
         // we have loaded a new frame - specify that nothing's changed
         this->changesPerformedUponCurrentAnnot = false;
@@ -1049,6 +1075,7 @@ void AnnotationsSet::closeFile(bool pleaseSave)
         this->originalImagesBuffer[i].release();
         this->annotationsClassesBuffer[i].release();
         this->annotationsIdsBuffer[i].release();
+        this->annotationsContoursBuffer[i].release();
     }
 
     this->annotsRecord.clear();
@@ -1519,6 +1546,24 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
         }
     }
 
+
+    // update the contours image
+    if (observedObjectsBBs.size()>0)
+    {
+        // updating it is only useful if there is at least one object!
+        Rect2i contoursROI = observedObjectsBBs[0];
+        for (size_t k=1; k<observedObjectsBBs.size(); k++)
+            contoursROI |= observedObjectsBBs[k];
+
+        this->computeFrameContours(this->currentImgIndex, contoursROI);
+    }
+
+
+
+
+
+
+
     // now checking and/or updating the compliance with the annotations record
 
     // first, perform some sorting... it's better to view the data in a slightly better arrangement
@@ -1698,6 +1743,12 @@ int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLef
     newAnnot.FrameNumber = this->currentImgIndex;
 
 
+    // we're going to compute the contours
+    // since the new annot may have affected surrounding objects, we grow the area by 1 pixel in every direction
+    Rect2i contoursBB = Rect2i(Point2i(leftMostCoord-1, topMostCoord-1), Point2i(rightMostCoord+2, bottomMostCoord+2));
+    this->computeFrameContours(this->currentImgIndex, contoursBB);
+
+
 
     // handle the cases where we have modified previously recorded objects first
     // (since it may modify the main record indexes, we want to do it before assigning an index to the new object)
@@ -1714,6 +1765,12 @@ int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLef
     return this->annotsRecord.addNewAnnotation(newAnnot);
 
 }
+
+
+
+
+
+
 
 
 void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::Point2i& topLeftCorner)
@@ -1780,6 +1837,12 @@ void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::
 
     // now we should spend some time updating the record - we need to find the new bounding boxes, as well as the cases when an object was completely erased
     this->handleAnnotationsModifications(affectedObjectsList, affectedObjectsBBs);
+
+
+    // also compute again the contours thing
+    // since the new annot may have affected surrounding objects, we grow the area by 1 pixel in every direction
+    Rect2i contoursBB = Rect2i(topLeftCorner.x-1, topLeftCorner.y-1, mask.cols+2, mask.rows+2);
+    this->computeFrameContours(this->currentImgIndex, contoursBB);
 }
 
 
@@ -1992,7 +2055,19 @@ void AnnotationsSet::deleteAnnotations(const std::vector<int>& annotationsList, 
 
 
 
+void AnnotationsSet::clearCurrentFrame()
+{
+    // nullify everything
+    this->accessCurrentAnnotationsClasses() *= 0;
+    this->accessCurrentAnnotationsIds() *= 0;
+    this->accessCurrentContours() *= 0;
 
+    //store a copy of the list of annotations
+    vector<int> deleteIds = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
+    this->annotsRecord.deleteAnnotationsGroup(deleteIds);
+
+    // that's pretty much it !
+}
 
 
 
@@ -2201,6 +2276,14 @@ void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList
 
 
 
+
+        // in case it's a uniform class we're switching to
+        Rect2i contoursBB;
+
+
+
+
+
         if (this->config.getProperty(classId).classType == _ACT_Uniform)
         {
             // case one : it's a uniform class ID - we merge it to one single object
@@ -2225,6 +2308,9 @@ void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList
 
             // call the merging procedure from the record
             this->annotsRecord.mergeIntraFrameAnnotationsTo(correspondingIdsList[fr], classId, newObjectId);
+
+            // update the contours BB, we're in the case when there is a possibility that the contours were modified
+            contoursBB = this->annotsRecord.getAnnotationById(this->annotsRecord.searchAnnotation(frameNumber, classId, newObjectId)).BoundingBox;
 
             // the images modifications will happen later
         }
@@ -2253,10 +2339,18 @@ void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList
             continue;   // no data available, just continue...
 
 
+        /*
+        if (oldObjectsCharacsList.size()>0)
+            contoursBB = oldObjectsCharacsList[0].BoundingBox;
+        */
+
+
         // alright, the record has been modified, now fix the image
         for (size_t k=0; k<oldObjectsCharacsList.size(); k++)
         {
             const AnnotationObject& oldAnnot=oldObjectsCharacsList[k];
+
+            // contoursBB |= oldAnnot.BoundingBox;
 
             for (int i=oldAnnot.BoundingBox.tl().y; i<oldAnnot.BoundingBox.br().y; i++)
             {
@@ -2281,6 +2375,14 @@ void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList
         {
             imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
             imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
+
+            // if we're in the buffer, then we might need to update the contours image
+            if (this->config.getProperty(classId).classType == _ACT_Uniform)
+            {
+                // it is not useful to update contours unless we switch to a uniform class (which would mean that we merge
+                contoursBB = Rect2i(contoursBB.tl().x-1, contoursBB.tl().y-1, contoursBB.size().width+2, contoursBB.size().height+2);
+                this->computeFrameContours(frameNumber, contoursBB);
+            }
         }
 
     }
@@ -2314,6 +2416,11 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
     string imgFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName), frameNumber);
 
 
+    // storing the bounding boxes so that we know which region within the image was affected
+    Rect2i contoursBB = this->annotsRecord.getAnnotationById(listObjects[0]).BoundingBox;
+
+
+
     // is it in the buffer?
     if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
     {
@@ -2326,6 +2433,9 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
         this->loadAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
     }
 
+
+
+    // alright, proceed
     if (imToModifyClasses.data && imToModifyObjIds.data)
     {
         // we can proceed to modifying the images
@@ -2333,6 +2443,9 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
         {
             // storing the references of the object that we wish to modify
             const AnnotationObject& annObj = this->annotsRecord.getAnnotationById(listObjects[k]);
+
+            // updating the contours BB so that it contains every object within the concerned area
+            contoursBB |= annObj.BoundingBox;
 
             // avoiding to do some unnecessary thing..
             if (annObj.ClassId==newClassId && annObj.ObjectId==newObjectId)
@@ -2360,6 +2473,10 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
         {
             imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
             imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
+
+            // this is where the contoursBB thing appears
+            contoursBB = Rect2i(contoursBB.tl().x-1, contoursBB.tl().y-1, contoursBB.size().width+2, contoursBB.size().height+2);
+            this->computeFrameContours(frameNumber, contoursBB);
         }
     }
 
@@ -2369,9 +2486,107 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
 
 
 
+
+void AnnotationsSet::computeFrameContours(int frameId, const cv::Rect2i& ROI)
+{
+    // verifying that the frameId makes sense
+    if (frameId==-1)
+        frameId = this->currentImgIndex;
+    else if ((frameId<=this->maxImgReached-this->bufferLength) || (frameId>this->maxImgReached))
+        return;
+
+
+    // simply fills a
+    Rect2i currentROI = ROI;
+
+    if (ROI == cv::Rect2i(-3,-3,0,0))
+    {
+        // using the whole image
+        currentROI = Rect2i(Point2i(0, 0), this->getOriginalImg(frameId).size());
+    }
+    else
+    {
+        // ensuring that the argument passed is well within the boundaries of the image
+        currentROI = ROI & Rect2i(Point2i(0, 0), this->getOriginalImg(frameId).size());
+    }
+
+    // checking that the image is already filled correctly
+    if (!this->annotationsContoursBuffer[frameId % this->bufferLength].data)
+    {
+        this->annotationsContoursBuffer[frameId % this->bufferLength] = Mat::zeros(this->getOriginalImg(frameId).size(), CV_8UC1);
+    }
+
+    // storing useful data and pointers for more readability...
+    const Mat& currClasses = this->annotationsClassesBuffer[frameId % this->bufferLength];
+    const Mat& currObjIds = this->annotationsIdsBuffer[frameId % this->bufferLength];
+    Mat& currContours = this->annotationsContoursBuffer[frameId % this->bufferLength];
+
+    int lastRow = this->getOriginalImg(frameId).rows -1;
+    int lastCol = this->getOriginalImg(frameId).cols -1;
+
+    // now running through the selected area
+    for (int i=currentROI.tl().y; i<currentROI.br().y; i++)
+    {
+        for (int j=currentROI.tl().x; j<currentROI.br().x; j++)
+        {
+            // default : not part of a contour
+            currContours.at<uchar>(i,j) = 0;
+
+            // is it some part of an object?
+            if (currClasses.at<int16_t>(i,j) != 0)
+            {
+                // yes
+                if (i==0 || i==lastRow || j==0 || j==lastCol)
+                {
+                    // we are necessarily at the boundaries of the image, it's a contour
+                    currContours.at<uchar>(i,j) = 1;
+                    continue;   // no need to go further...!
+                }
+
+                // ok, need to check the surrounding pixels
+                // fortunately, we already have handled the case when we're at the borders of the image
+
+                bool alreadySolved = false;
+
+                int currClass = currClasses.at<int16_t>(i,j);
+                int currObjId = currObjIds.at<int32_t>(i,j);
+
+                // evaluating the surrounding pixels
+                for (int u=i-1; u<=i+1; u++)
+                {
+                    for (int v=j-1; v<=j+1; v++)
+                    {
+                        if (u==i && v==j)
+                            continue;
+
+                        // one object different is enough
+                        if (currClasses.at<int16_t>(u,v)!=currClass || currObjIds.at<int32_t>(u,v)!=currObjId)
+                        {
+                            currContours.at<uchar>(i,j) = 1;    // store the result
+                            alreadySolved = true;   // end the loops
+                            break;
+                        }
+                    }
+
+                    if (alreadySolved)
+                        break;
+                }
+            }
+        }
+    }
+
+    // that's all folks :)
+}
+
+
+
+
+
+
 void AnnotationsSet::loadAnnotationsImageFile(const std::string& fileName, cv::Mat& classesMat, cv::Mat& objIdsMat) const
 {
     // this method only loads the data - unlike loadCurrentAnnotation, it takes for granted that the file is well formatted
+    // we don't compute the contours there, they're useless for this operation
 
     // remove all of the data first - the presence or absence of data will show the success of the method or not
     classesMat.release();

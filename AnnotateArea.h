@@ -75,6 +75,10 @@
 enum cursorShape { AA_CS_round, AA_CS_square };
 
 
+const unsigned int _AA_CI_NoC = 0;      // no contours color index
+const unsigned int _AA_CI_NotSelC = 1;  // non-selected contour color index
+const unsigned int _AA_CI_SelC = 2;     // selected contour color index
+
 
 class AnnotateArea : public QWidget
 {
@@ -109,8 +113,6 @@ public:
     void setScale(float newScale);
 
 
-
-
 public slots:
     void displayNextFrame();
     void displayPrevFrame();
@@ -142,7 +144,7 @@ private:
     //void resizeImage(QImage *image, const QSize &newSize);
 
     //void updateContent();
-    void updatePaintImage(const QRect& ROI=QRect(-3, -3, 0, 0));
+    void updatePaintImages(const QRect& ROI=QRect(-3, -3, 0, 0), bool contoursOnly=false);
 
 
     QRect adaptToScaleMul(const QRect&) const;
@@ -162,7 +164,8 @@ private:
 
     cursorShape myPenShape;
 
-    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage;
+    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage, ContoursImage;
+    // QRgb contourNone, contourOn, contourSelected;
     QRect ObjectROI;
 
     float scaleFactor;

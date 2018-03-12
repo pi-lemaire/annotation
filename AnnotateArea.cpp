@@ -98,7 +98,7 @@ bool AnnotateArea::openImage(const QString &fileName)
 
     this->reload();
 
-    this->updatePaintImage();
+    this->updatePaintImages();
 
     this->selectAnnotation(-1);
 
@@ -114,7 +114,7 @@ bool AnnotateArea::openVideo(const QString &fileName)
 
     this->reload();
 
-    this->updatePaintImage();
+    this->updatePaintImages();
 
     this->selectAnnotation(-1);
 
@@ -133,7 +133,7 @@ bool AnnotateArea::openAnnotations(const QString &fileName)
 
     this->reload();
 
-    this->updatePaintImage();
+    this->updatePaintImages();
 
     this->selectAnnotation(-1);
 
@@ -223,6 +223,13 @@ void AnnotateArea::reload()
     // format the other layers correctly
     this->PaintingImage = QImage(this->BackgroundImage.size(), QImage::Format_ARGB32);
     this->PaintingImage.fill(qRgba(255, 255, 255, 0));
+
+    this->ContoursImage = QImage(this->BackgroundImage.size(), QImage::Format_Indexed8);
+    this->ContoursImage.setColor(_AA_CI_NoC, qRgba(255, 255, 255, 0));
+    this->ContoursImage.setColor(_AA_CI_NotSelC, qRgba(0, 0, 0, 255));
+    this->ContoursImage.setColor(_AA_CI_SelC, qRgba(255, 255, 255, 255));
+    this->ContoursImage.fill(_AA_CI_NoC);
+
     this->ObjectImage = QImage(this->BackgroundImage.size(), QImage::Format_Mono);
 
 
@@ -253,13 +260,23 @@ void AnnotateArea::setWidgetSize(const QSize& newSize)
 
 void AnnotateArea::displayNextFrame()
 {
+    // store data about the previously selected object
+    // if none was selected, the record should return some impossible filled object?
+    AnnotationObject previouslySelectedObj = this->annotations->getRecord().getAnnotationById(this->selectedObjectId);
+
     if (this->annotations->loadNextFrame())
     {
+        // preselect the same object than what was previously selected
+        this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
+                                                                                  previouslySelectedObj.ClassId,
+                                                                                  previouslySelectedObj.ObjectId );
+        // if no object corresponds, it will be -1 - exactly what we need
+
         this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
 
-        this->updatePaintImage();
+        this->updatePaintImages();
 
-        this->selectAnnotation(-1);
+        this->selectAnnotation(this->selectedObjectId);
 
         // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
@@ -276,20 +293,30 @@ void AnnotateArea::displayPrevFrame()
 
 void AnnotateArea::contentModified()
 {
-    this->updatePaintImage();
+    this->updatePaintImages();
     // this->selectAnnotation(this->selectedObjectId);
 }
 
 
 bool AnnotateArea::displayFrame(int id)
 {
+    // store data about the previously selected object
+    // if none was selected, the record should return some impossible filled object?
+    AnnotationObject previouslySelectedObj = this->annotations->getRecord().getAnnotationById(this->selectedObjectId);
+
     if (this->annotations->loadFrame(id))
     {
+
+        // preselect the same object than what was previously selected
+        this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
+                                                                                  previouslySelectedObj.ClassId,
+                                                                                  previouslySelectedObj.ObjectId );
+
         this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
 
-        this->updatePaintImage();
+        this->updatePaintImages();
 
-        this->selectAnnotation(-1);
+        this->selectAnnotation(this->selectedObjectId);
 
         // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
@@ -306,9 +333,12 @@ bool AnnotateArea::displayFrame(int id)
 void AnnotateArea::clearImage()
 {
     this->PaintingImage.fill(qRgba(255, 255, 255, 0));
+    this->ContoursImage.fill(_AA_CI_NoC);
 
-    //this->modified = true;
-    // updateContent();
+    this->annotations->clearCurrentFrame();
+
+    this->selectAnnotation(-1);
+
     this->update();
 }
 
@@ -388,6 +418,9 @@ void AnnotateArea::selectAnnotation(int annotId)
         this->ObjectROI = newROI;
     }
 
+    // update the contour image
+    this->updatePaintImages(updateRoi, true);
+
     // update the part containing both the old and the new ROI
     this->update( this->adaptToScaleMul(updateRoi.adjusted(-2,-2,2,2)) );
 
@@ -405,7 +438,7 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
         // the user starts drawing something with his left button.. store the position and record the status
         this->lastPoint = this->adaptToScaleDiv(event->pos());
         this->firstAnnotPoint = this->lastPoint;
-        this->scribbling = true;
+
 
         // filling the image ObjectImage. This image will record the pixels that were specifically annotated
         // we fill it with color1, that sets all the pixels to 1. Then we will paint it black, and finally extract the darkest pixels
@@ -419,8 +452,14 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
         // also specify that nothing is selected anymore (it's useful for the bounding boxes display thing)
         this->selectedObjectId = -1;
         QRect previousROI = this->ObjectROI;
-        this->ObjectROI = QRect(-3, -3, 0, 0);
+
+        // update the contours because if an object was selected, it's likely to interfere
+        this->updatePaintImages(previousROI, true);
         this->update( this->adaptToScaleMul(previousROI.adjusted(-2, -2, 2, 2)) );
+
+
+        // at the (almost) last time, specify that we've entered in scribbling mode
+        this->scribbling = true;
 
         // start recording the right ROI
         this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
@@ -489,6 +528,11 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         }
 
 
+        // specify that we have to update the contours image
+        // - update with a 1 pixel wide surrounding because it may have affected surrounding objects
+        this->updatePaintImages(this->ObjectROI.adjusted(-1,-1,1,1), true);
+
+
 
         emit selectedObject(this->selectedObjectId);
 
@@ -505,11 +549,14 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         // find the right annotation at the place where we clicked
         this->selectedObjectId = this->annotations->getObjectIdAtPosition(actualPos.x(), actualPos.y());
 
+        // update the display and emit the signal
+        this->selectAnnotation(this->selectedObjectId);
+
         // emit the information
-        emit selectedObject(this->selectedObjectId);
+        //emit selectedObject(this->selectedObjectId);
 
         // ok i'm being lazy there - update the whole image...
-        this->update();
+        //this->update();
     }
 }
 
@@ -558,10 +605,30 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     painter.setOpacity(1.);
     painter.drawImage(dirtyRect.topLeft(), this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
 
-    // now draw the annotations... remove some opacity so that the background is always visible
-    painter.setOpacity(0.6);
-    painter.drawImage(dirtyRect.topLeft(), this->PaintingImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
 
+    if (this->scribbling)
+    {
+        // scribbling mode : paint contours THEN objects
+        // and draw the contours of objects
+        painter.setOpacity(0.5);
+        painter.drawImage(dirtyRect.topLeft(), this->ContoursImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+
+        // now draw the annotations... remove some opacity so that the background is always visible
+        painter.setOpacity(0.6);
+        painter.drawImage(dirtyRect.topLeft(), this->PaintingImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+    }
+    else
+    {
+        // normal mode : paint objects THEN contours
+
+        // now draw the annotations... remove some opacity so that the background is always visible
+        painter.setOpacity(0.6);
+        painter.drawImage(dirtyRect.topLeft(), this->PaintingImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+
+        // and draw the contours of objects
+        painter.setOpacity(0.5);
+        painter.drawImage(dirtyRect.topLeft(), this->ContoursImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+    }
     /*
     qDebug() << "background image subset size : " << this->BackgroundImage.copy(origImgArea).size()
              << "after painting it : " << this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding).size()
@@ -732,16 +799,21 @@ void AnnotateArea::drawLineTo(const QPoint &endPoint)
 
 
 
-void AnnotateArea::updatePaintImage(const QRect& ROI)
+void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
 {
     QRect localROI = ROI;
 
     // update the paint image according to the annotations available
     if (ROI == QRect(-3, -3, 0, 0))
     {
-        // no ROI was specified, fill the whole image. Intialize it properly beforehand
-        this->PaintingImage = QImage(this->BackgroundImage.size(), QImage::Format_ARGB32);
-        this->PaintingImage.fill(qRgba(255, 255, 255, 0));
+        if (!contoursOnly)
+        {
+            // no ROI was specified, fill the whole image. Intialize it properly beforehand
+            this->PaintingImage = QImage(this->BackgroundImage.size(), QImage::Format_ARGB32);
+            this->PaintingImage.fill(qRgba(255, 255, 255, 0));
+        }
+
+        this->ContoursImage.fill(_AA_CI_NoC);
 
         // perhaps it's enough already? use the annotations index to know if we need to go any further
         const std::vector<int>& currentFrameAnnots = this->annotations->getRecord().getFrameContentIds(this->annotations->getCurrentFramePosition());
@@ -774,12 +846,41 @@ void AnnotateArea::updatePaintImage(const QRect& ROI)
         classesColorList.push_back(QColor(classCol[0], classCol[1], classCol[2], 255));
     }
 
-    // now run through the ROI of the image and fill the pixels
-    for (int i=localROI.top(); i<localROI.bottom(); i++)
+
+    // ensure that the ROI is not outside of the image boundaries
+    localROI &= QRect(QPoint(0,0), this->BackgroundImage.size());
+
+
+    // prepare for the contours displaying thing
+    int selectedObjClass=0, selectedObjId=-1;
+    if (this->selectedObjectId != -1)
     {
-        for (int j=localROI.left(); j<localROI.right(); j++)
+        selectedObjClass = this->annotations->getRecord().getAnnotationById(this->selectedObjectId).ClassId;
+        selectedObjId = this->annotations->getRecord().getAnnotationById(this->selectedObjectId).ObjectId;
+    }
+
+
+    // now run through the ROI of the image and fill the pixels
+    // for some reason, Qt's BR corner is inclusive - it means that unlike the rest of the whole framework, we need <= comparisons
+    for (int i=localROI.top(); i<=localROI.bottom(); i++)
+    {
+        for (int j=localROI.left(); j<=localROI.right(); j++)
         {
-            this->PaintingImage.setPixelColor(j,i, classesColorList[this->annotations->getCurrentAnnotationsClasses().at<int16_t>(i,j)]);
+            if (!contoursOnly)
+                this->PaintingImage.setPixelColor(j,i, classesColorList[this->annotations->getCurrentAnnotationsClasses().at<int16_t>(i,j)]);
+
+            unsigned int currContourColor = _AA_CI_NoC;
+            if (this->annotations->getCurrentContours().at<uchar>(i,j) > 0)
+            {
+                // try to know if the object was selected or not
+                if ( (this->annotations->getCurrentAnnotationsClasses().at<int16_t>(i,j)==selectedObjClass) &&
+                     (this->annotations->getCurrentAnnotationsIds().at<int32_t>(i,j)==selectedObjId) )
+                    currContourColor = _AA_CI_SelC;
+                else
+                    currContourColor = _AA_CI_NotSelC;
+            }
+
+            this->ContoursImage.setPixel(j,i,currContourColor);
         }
     }
 
