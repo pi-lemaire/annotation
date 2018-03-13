@@ -20,11 +20,11 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
 
     // then the layout
     this->browserLayout = new QGridLayout;
-    this->browserLayout->addWidget(this->browser, 0, 0, 1, 4);
-    this->browserLayout->addWidget(this->buttonGroupAnnotations, 1, 0, 1, 1);
-    this->browserLayout->addWidget(this->buttonSeparateAnnotations, 1, 1, 1, 1);
-    this->browserLayout->addWidget(this->buttonDeleteAnnotations, 1, 2, 1, 1);
-    this->browserLayout->addWidget(this->buttonSwitchAnnotationsClass, 1, 3, 1, 1);
+    this->browserLayout->addWidget(this->browser, 0, 0, 1, 2);
+    this->browserLayout->addWidget(this->buttonDeleteAnnotations, 1, 0, 1, 1);
+    this->browserLayout->addWidget(this->buttonSwitchAnnotationsClass, 1, 1, 1, 1);
+    this->browserLayout->addWidget(this->buttonGroupAnnotations, 2, 0, 1, 1);
+    this->browserLayout->addWidget(this->buttonSeparateAnnotations, 2, 1, 1, 1);
 
     // set the layout as the main thing
     this->setLayout(this->browserLayout);
@@ -54,6 +54,82 @@ void AnnotationsBrowser::setClassSelected(int whichClass)
     this->currentClassSelected = whichClass;
     this->setButtonsActivation();
 }
+
+
+
+void AnnotationsBrowser::checkSelected()
+{
+    // checks the currently selected annotation
+    if (this->currentAnnotSelected != -1)
+    {
+        // verify whether it's already in the lines checked record
+        bool notYetChecked = true;
+
+        for (size_t k=0; k<this->linesChecked.size(); k++)
+        {
+            if (this->linesChecked[k].recordId == this->currentAnnotSelected)
+            {
+                notYetChecked = false;
+                break;
+            }
+        }
+
+        if (notYetChecked)
+        {
+            // store the new checked object
+            annotSelection newSel;
+            newSel.recordId = this->currentAnnotSelected;
+
+            // storing additional information will allow us to adapt when some annotation operations
+            // affect the various IDs recorded
+            newSel.frameId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).FrameNumber;
+            newSel.classId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ClassId;
+            newSel.objectId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ObjectId;
+
+            this->linesChecked.push_back(newSel);
+
+            this->updateBrowser(this->currentAnnotSelected);
+        }
+    }
+}
+
+
+
+void AnnotationsBrowser::uncheckSelected()
+{
+    // unchecks the currently selected annotation
+    if (this->currentAnnotSelected != -1)
+    {
+        // search for the corresponding line
+        bool changesPerformed = false;
+
+        for (size_t k=0; k<this->linesChecked.size(); k++)
+        {
+            if (this->linesChecked[k].recordId == this->currentAnnotSelected)
+            {
+                // found it, delete the line
+                this->linesChecked.erase(this->linesChecked.begin()+k);
+                changesPerformed = true;
+                break;
+            }
+        }
+
+        if (changesPerformed)
+        {
+            this->updateBrowser(this->currentAnnotSelected);
+        }
+    }
+}
+
+
+
+
+void AnnotationsBrowser::uncheckAll()
+{
+    this->linesChecked.clear();
+    this->updateBrowser(this->currentAnnotSelected);
+}
+
 
 
 

@@ -87,11 +87,6 @@ MainWindow::MainWindow()
     // this is for window-related stuff
     setCentralWidget(this->annotateScrollArea);
 
-    // create the menu actions etc
-    this->createActions();
-    this->createMenus();
-
-    this->updateActionsAvailability();
 
 
     // generate the object little window that will handle the class selection
@@ -102,9 +97,18 @@ MainWindow::MainWindow()
 
     // generate the browser, provide the right pointer
     this->annotsBrowser = new AnnotationsBrowser(this->annotations, this, Qt::Tool);
+    this->annotsBrowser->resize(350, 450);
     this->annotsBrowser->show();
     this->annotsBrowser->setWindowTitle(tr("Objects Selection"));
     this->annotsBrowser->move(100, 400);
+
+
+    // create the menu actions etc
+    this->createActions();
+    this->createMenus();
+
+    this->updateActionsAvailability();
+
 
 
     // connect the class selection and the annotate area
@@ -120,7 +124,7 @@ MainWindow::MainWindow()
 
 
     setWindowTitle(tr("Annotate"));
-    resize(500, 500);
+    resize(800, 600);
 }
 
 
@@ -542,9 +546,6 @@ void MainWindow::createActions()
     this->decreaseScaleAct = new QAction(tr("Zoom &back..."), this);
     connect(this->decreaseScaleAct, SIGNAL(triggered()), this, SLOT(decreaseZoom()));
 
-
-
-
     this->rubberModeAct = new QAction(tr("&Rubber Mode"), this);
     connect(this->rubberModeAct, SIGNAL(triggered()), this->annotateArea, SLOT(switchRubberMode()));
     this->rubberModeAct->setCheckable(true);
@@ -555,16 +556,31 @@ void MainWindow::createActions()
     connect(this->clearScreenAct, SIGNAL(triggered()), this->annotateArea, SLOT(clearImage()));
 
 
+    this->checkSelectedAct = new QAction(tr("Check the Selected Annotation"), this);
+    connect(this->checkSelectedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(checkSelected()));
+    this->uncheckSelectedAct = new QAction(tr("Un-Check the Selected Annotation"), this);
+    connect(this->uncheckSelectedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckSelected()));
+    this->uncheckAllAct = new QAction(tr("Uncheck All annotations"), this);
+    connect(this->uncheckAllAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckAll()));
+
+
+
+
 
     this->nextFrameAct->setShortcut(Qt::Key_Right);
     this->prevFrameAct->setShortcut(Qt::Key_Left);
+
     this->increasePenWidthAct->setShortcut(Qt::Key_Up);
     this->decreasePenWidthAct->setShortcut(Qt::Key_Down);
+    this->rubberModeAct->setShortcut(Qt::Key_Backspace);
+
     this->scaleToOneAct->setShortcut(Qt::Key_0);
     this->increaseScaleAct->setShortcut(Qt::Key_Plus);
     this->decreaseScaleAct->setShortcut(Qt::Key_Minus);
-    this->rubberModeAct->setShortcut(Qt::Key_Delete);
 
+    this->checkSelectedAct->setShortcut(Qt::Key_C);
+    this->uncheckSelectedAct->setShortcut(Qt::Key_U);
+    this->uncheckAllAct->setShortcut(Qt::ALT + Qt::Key_U);
 
 
 
@@ -614,6 +630,10 @@ void MainWindow::createMenus()
     this->optionMenu->addAction(this->rubberModeAct);
     this->optionMenu->addSeparator();
     this->optionMenu->addAction(this->clearScreenAct);
+    this->optionMenu->addSeparator();
+    this->optionMenu->addAction(this->checkSelectedAct);
+    this->optionMenu->addAction(this->uncheckSelectedAct);
+    this->optionMenu->addAction(this->uncheckAllAct);
     this->optionMenu->addSeparator();
 
     // this->settingsMenu = this->optionMenu->addMenu(tr("&Settings..."));

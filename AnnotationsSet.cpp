@@ -2003,6 +2003,9 @@ void AnnotationsSet::mergeAnnotations(const std::vector<int>& annotationsList)
 
     // finally erase all of the unnecessary objects
     this->deleteAnnotations(objectsToRemove, true);
+
+    // don't forget to state that changes were performed!
+    this->changesPerformedUponCurrentAnnot = true;
 }
 
 
@@ -2051,6 +2054,9 @@ void AnnotationsSet::deleteAnnotations(const std::vector<int>& annotationsList, 
 
     // finally delete them from the record
     this->annotsRecord.deleteAnnotationsGroup(annotationsList);
+
+    // don't forget to state that changes were performed!
+    this->changesPerformedUponCurrentAnnot = true;
 }
 
 
@@ -2066,7 +2072,8 @@ void AnnotationsSet::clearCurrentFrame()
     vector<int> deleteIds = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
     this->annotsRecord.deleteAnnotationsGroup(deleteIds);
 
-    // that's pretty much it !
+    // don't forget to state that changes were performed!
+    this->changesPerformedUponCurrentAnnot = true;
 }
 
 
@@ -2167,7 +2174,7 @@ void AnnotationsSet::separateAnnotations(const std::vector<int>& separateList)
         }
     }
 
-    // don't forget to store the result in case it's needed
+    // don't forget to store the last result that was not store within the loop in case it's needed
     if (classesMat.data)
     {
         // store the modifications that have been performed before
@@ -2180,6 +2187,9 @@ void AnnotationsSet::separateAnnotations(const std::vector<int>& separateList)
             objIdsMat.copyTo(this->annotationsIdsBuffer[currFrame%this->bufferLength]);
         }
     }
+
+    // normally, every changes have been recorded already, however it seems more safe to state that changes can have been performed
+    this->changesPerformedUponCurrentAnnot = true;
 
     // pfffouuuhhh... it's over i think
 }
@@ -2390,6 +2400,9 @@ void AnnotationsSet::switchAnnotationsToClass(const std::vector<int>& switchList
 
     // don't forget to remove now useless items
     this->annotsRecord.deleteAnnotationsGroup(deleteIndices);
+
+    // don't forget to state that changes were performed!
+    this->changesPerformedUponCurrentAnnot = true;
 }
 
 
@@ -2481,7 +2494,14 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
     }
 
     // finally, we simply call the merge procedure from the record
-    this->annotsRecord.mergeIntraFrameAnnotationsTo(listObjects, newClassId, newObjectId);
+    // beware for one exception : sometimes we call this function within an object deletion
+    // in this case, we don't want to merge anything
+    if (newClassId != 0)
+        this->annotsRecord.mergeIntraFrameAnnotationsTo(listObjects, newClassId, newObjectId);
+
+
+    // don't forget to state that changes were performed!
+    this->changesPerformedUponCurrentAnnot = true;
 }
 
 

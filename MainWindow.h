@@ -151,10 +151,17 @@ private:
     QAction *nextFrameAct;
     QAction *prevFrameAct;
 
+    // pen related actions
     QAction *penWidthAct, *increasePenWidthAct, *decreasePenWidthAct, *penStyleRoundAct, *penStyleSquareAct;
     QActionGroup *penStyleActGroup;
-    QAction *scaleToOneAct, *increaseScaleAct, *decreaseScaleAct;
     QAction *rubberModeAct;
+
+    // zoom related actions
+    QAction *scaleToOneAct, *increaseScaleAct, *decreaseScaleAct;
+
+    // browser and selection related actionss
+    QAction *checkSelectedAct, *uncheckSelectedAct, *uncheckAllAct;
+
     QAction *printAct;
     QAction *clearScreenAct;
     QAction *aboutAct;

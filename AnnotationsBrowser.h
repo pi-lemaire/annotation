@@ -33,6 +33,9 @@ public:
 public slots:
     void updateBrowser(int);    // the int corresponds to the selected annotation // -1 means none selected
     void setClassSelected(int); // this is useful for this object to know which class is selected, for the "switch" functionnality
+    void checkSelected();       // allows to check an object already selected (for instance using the right click), for browser operations such as delete, merge, etc
+    void uncheckSelected();     // remove the selected annotation from the checked list
+    void uncheckAll();          // clear the checked list
 
 private slots:
     void GroupAnnotationsClicked();

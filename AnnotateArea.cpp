@@ -184,8 +184,12 @@ void AnnotateArea::setPenWidth(int newWidth)
     this->CursorBitmap = QBitmap(64,64);
     // draw with blank values, then paint it
     this->CursorBitmap.fill();
+
+    QBitmap originalBitMapCopy = this->CursorBitmap.copy();
+
     QPainter cursorPainter(&(this->CursorBitmap));
     cursorPainter.setPen(Qt::black);
+
     // 32, 32 is supposed to be the middle of the area?
     if (this->myPenShape == AA_CS_round)
         cursorPainter.drawEllipse(QPointF(32,32), this->myPenWidth/2., this->myPenWidth/2.);
@@ -194,8 +198,11 @@ void AnnotateArea::setPenWidth(int newWidth)
     cursorPainter.drawPoint(32,32);
     cursorPainter.end();
 
-    // use this as a cursor
-    this->setCursor(QCursor(this->CursorBitmap, this->CursorBitmap, 32, 32));
+    if (this->rubberMode)
+        this->setCursor(QCursor(originalBitMapCopy, this->CursorBitmap, 32, 32));
+        // use this as a cursor
+    else
+        this->setCursor(QCursor(this->CursorBitmap, this->CursorBitmap, 32, 32));
 }
 
 
@@ -392,6 +399,7 @@ void AnnotateArea::setPenColor(const QColor &newColor)
 void AnnotateArea::switchRubberMode()
 {
     this->rubberMode = !this->rubberMode;
+    this->setPenWidth(this->myPenWidth);
 }
 
 
@@ -636,7 +644,7 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
              */
     // now displaying the bounding boxes - only if we're not in scribble mode
     this->drawBoundingBoxes(dirtyRect);
-    painter.setOpacity(0.8);
+    painter.setOpacity(0.9);
     painter.drawImage(dirtyRect.topLeft(), this->BoundingBoxesImage.copy(dirtyRect));
 
 
@@ -697,12 +705,27 @@ void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
     // now ensure that what we're painting now will add something
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
+
+    painter.setRenderHint(QPainter::Antialiasing);
+
+
+    // setting the font
+    QFont numberFont("Helvetica [Cronyx]", 16, QFont::Bold);
+    numberFont.setStyleStrategy(QFont::PreferAntialias);
+    QPen textOutline;
+    textOutline.setWidth(1);
+    //textOutline.setColor(Qt::white);
+
+
+
+
+
     // now displaying the bounding boxes
     const std::vector<int>& currFrameObjects = this->annotations->getObjectsListOnCurrentFrame();
 
     for (size_t k=0; k<currFrameObjects.size(); k++)
     {
-        QRect currBB = QtCvUtils::cvRect2iToQRect( this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).BoundingBox );
+        QRect currBB = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).BoundingBox);
 
         if (origImgRect.intersects(currBB))
         {
@@ -710,6 +733,7 @@ void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
 
             QColor rightColor = QtCvUtils::cvVec3bToQColor(this->annotations->getConfig().getProperty(currClass).displayRGBColor, 255);
             // setting the right color
+            // we divide the color by 2 (darken it) so that it contrasts better
 
             if (currFrameObjects[k] == this->selectedObjectId)
             {
@@ -719,10 +743,41 @@ void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
             else
             {
                 painter.setPen(QPen(rightColor, 1, Qt::DashLine));
-                painter.setOpacity(0.7);
+                painter.setOpacity(0.8);
             }
 
             painter.drawRect(this->adaptToScaleMul(currBB));
+
+
+
+            // now handling the text (if needed)
+            if (this->annotations->getConfig().getProperty(currClass).classType != _ACT_Uniform)
+            {
+                // for drawing the objects numbering, we use a textPath object
+                // this allows to draw the outline and the inside of characters with a different color
+                QPainterPath textPath;
+                textOutline.setColor(qRgb(rightColor.red()/2, rightColor.green()/2, rightColor.blue()/2));  // darken the color to increase the contrast!
+                painter.setPen(textOutline);
+
+                // try to set the text inside the bounding box
+                QPoint textPos = this->adaptToScaleMul(currBB).topLeft();
+                textPos.setY(textPos.y() + 13);
+
+                textPath.addText(textPos, numberFont, QString::number(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ObjectId));
+                painter.setBrush(Qt::white);    // filling the characters with white
+                painter.drawPath(textPath);
+                painter.setBrush(Qt::transparent);  // don't forget to remove the filling
+
+
+                // we draw the text then
+                /*
+                painter.drawText(this->adaptToScaleMul(currBB),
+                                 QString::number(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ObjectId),
+                                 Qt::AlignBottom | Qt::AlignRight);
+                                 */
+
+                //painter.setPen(QPen());
+            }
         }
     }
 
