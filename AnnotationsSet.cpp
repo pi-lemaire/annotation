@@ -449,10 +449,14 @@ void AnnotationsRecord::mergeIntraFrameAnnotationsTo(const std::vector<int>& ann
     if (annotsList.size()<1)
         return;
 
+    if (newClassId<0)   // this case doesn't make any sense, discard it as well
+        return;
+
     int firstAnnotId = annotsList[0];
 
     if (firstAnnotId<0 || firstAnnotId>=(int)this->record.size())
         return;
+
 
     // storing currAnnot as a reference - this way we shall(?) access directly to the object and modify it straight away
     AnnotationObject& currAnnot = this->record[firstAnnotId];

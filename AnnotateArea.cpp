@@ -64,10 +64,12 @@
 
 // public region
 
-AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent)
+AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnot, QWidget *parent)
     : QWidget(parent)
 {
     this->annotations = annotsSet;
+
+    this->SPAnnotate = SPAnnot;
 
     // ensuring that the widget is always referenced to the top left corner
     setAttribute(Qt::WA_StaticContents);
@@ -237,6 +239,12 @@ void AnnotateArea::reload()
     this->ContoursImage.setColor(_AA_CI_SelC, qRgba(255, 255, 255, 255));
     this->ContoursImage.fill(_AA_CI_NoC);
 
+    this->SPContoursImage = QImage(this->BackgroundImage.size(), QImage::Format_Indexed8);
+    this->SPContoursImage.setColor(_AA_CI_NoC, qRgba(255, 255, 255, 0));
+    this->SPContoursImage.setColor(_AA_CI_NotSelC, qRgba(255, 255, 0, 255));
+    // this->ContoursImage.setColor(_AA_CI_SelC, qRgba(255, 255, 255, 255));
+    this->SPContoursImage.fill(_AA_CI_NoC);
+
     this->ObjectImage = QImage(this->BackgroundImage.size(), QImage::Format_Mono);
 
 
@@ -337,10 +345,11 @@ bool AnnotateArea::displayFrame(int id)
 
 
 
-void AnnotateArea::clearImage()
+void AnnotateArea::clearImageAnnotations()
 {
     this->PaintingImage.fill(qRgba(255, 255, 255, 0));
     this->ContoursImage.fill(_AA_CI_NoC);
+    //this->SPContoursImage.fill(_AA_CI_NoC);
 
     this->annotations->clearCurrentFrame();
 
@@ -434,6 +443,35 @@ void AnnotateArea::selectAnnotation(int annotId)
 
     emit selectedObject(annotId);
 }
+
+
+
+
+void AnnotateArea::computeSuperPixelsMap()
+{
+    this->SPAnnotate->buildSPMap();
+
+    // force an update of the whole image
+    QRect updateArea = QRect(QPoint(0,0), this->BackgroundImage.size());
+    this->updatePaintImages(updateArea, true);
+    this->update();
+}
+
+
+
+void AnnotateArea::growAnnotationBySP()
+{
+    if (this->selectedObjectId != -1)
+    {
+        this->SPAnnotate->expandAnnotation(this->selectedObjectId);
+
+        QRect updateArea = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox);
+
+        this->updatePaintImages(updateArea.adjusted(-1,-1,1,1));    // use adjusted to take into account possible contours modifications
+        this->selectAnnotation(this->selectedObjectId);
+    }
+}
+
 
 
 
@@ -612,6 +650,15 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
     // first draw the BG image, use only the visible part
     painter.setOpacity(1.);
     painter.drawImage(dirtyRect.topLeft(), this->BackgroundImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+
+
+    // is there a super pixels map to display?
+    if (this->SPAnnotate->getContoursMask().data)
+    {
+        painter.setOpacity(0.5);
+        painter.drawImage(dirtyRect.topLeft(), this->SPContoursImage.copy(origImgArea).scaled(dirtyRect.size(), Qt::KeepAspectRatioByExpanding));
+    }
+
 
 
     if (this->scribbling)
@@ -869,6 +916,7 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
         }
 
         this->ContoursImage.fill(_AA_CI_NoC);
+        this->SPContoursImage.fill(_AA_CI_NoC);
 
         // perhaps it's enough already? use the annotations index to know if we need to go any further
         const std::vector<int>& currentFrameAnnots = this->annotations->getRecord().getFrameContentIds(this->annotations->getCurrentFramePosition());
@@ -936,6 +984,26 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
             }
 
             this->ContoursImage.setPixel(j,i,currContourColor);
+        }
+    }
+
+
+
+
+
+    if (this->SPAnnotate->getContoursMask().data)
+    {
+        for (int i=localROI.top(); i<=localROI.bottom(); i++)
+        {
+            for (int j=localROI.left(); j<=localROI.right(); j++)
+            {
+                unsigned int currContourColor = _AA_CI_NoC;
+
+                if (this->SPAnnotate->getContoursMask().at<uchar>(i,j) > 0)
+                    currContourColor = _AA_CI_NotSelC;
+
+                this->SPContoursImage.setPixel(j,i,currContourColor);
+            }
         }
     }
 

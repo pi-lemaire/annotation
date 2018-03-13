@@ -29,13 +29,20 @@ HEADERS       = \
     MainWindow.h \
     DialogClassSelection.h \
     QtCvUtils.h \
-    AnnotationsBrowser.h
+    AnnotationsBrowser.h \
+    ParamsHandler.h \
+    ParamsQEditorLine.h \
+    ParamsQEditorWindow.h \
+    SuperPixelsAnnotate.h
 SOURCES       = main.cpp \
     AnnotateArea.cpp \
     AnnotationsSet.cpp \
     DialogClassSelection.cpp \
     AnnotationsBrowser.cpp \
-    MainWindow.cpp
+    MainWindow.cpp \
+    ParamsQEditorWindow.cpp \
+    ParamsQEditorLine.cpp \
+    SuperPixelsAnnotate.cpp
 
 # install
 target.path = $$[QT_INSTALL_EXAMPLES]/widgets/widgets/scribble

@@ -420,6 +420,10 @@ public:
 
 
 
+    const std::string& getOpenedFileName() const { return (this->isVideoOpen() ? this->videoFileName : this->imageFileName); }
+
+
+
 
     int addAnnotation(const cv::Mat& mask, const cv::Point2i& topLeftCorner, int whichClass, const cv::Point2i& annotStartingPoint=cv::Point2i(-1,-1));
             // add an annotation.

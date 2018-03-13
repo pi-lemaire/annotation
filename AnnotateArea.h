@@ -63,6 +63,8 @@
 
 #include "AnnotationsSet.h"
 
+#include "SuperPixelsAnnotate.h"
+
 #include <opencv2/opencv.hpp>
 
 #include "QtCvUtils.h"
@@ -85,7 +87,7 @@ class AnnotateArea : public QWidget
     Q_OBJECT
 
 public:
-    AnnotateArea(AnnotationsSet* annotsSet, QWidget *parent = 0);
+    AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnotate, QWidget *parent = 0);
 
     bool openImage(const QString &fileName);
     bool openVideo(const QString &fileName);
@@ -119,11 +121,15 @@ public slots:
 
     void contentModified();
 
-    void clearImage();
+    void clearImageAnnotations();
     void print();
     void switchRubberMode();
     void selectClassId(int);
     void selectAnnotation(int);
+
+    void computeSuperPixelsMap();
+    void growAnnotationBySP();
+
 
 
 signals:
@@ -164,7 +170,7 @@ private:
 
     cursorShape myPenShape;
 
-    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage, ContoursImage;
+    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage, ContoursImage, SPContoursImage;
     // QRgb contourNone, contourOn, contourSelected;
     QRect ObjectROI;
 
@@ -174,6 +180,7 @@ private:
     QPoint lastPoint, firstAnnotPoint;
 
     AnnotationsSet *annotations;
+    SuperPixelsAnnotate* SPAnnotate;
 };
 
 #endif

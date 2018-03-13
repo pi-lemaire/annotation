@@ -68,11 +68,12 @@ MainWindow::MainWindow()
 {
     // first, generate the "core" object that will handle the annotations
     this->annotations = new AnnotationsSet();
+    this->SPAnnotate = new SuperPixelsAnnotate(this->annotations);
 
 
 
     // generate the interface, give the right pointer
-    this->annotateArea = new AnnotateArea(this->annotations);
+    this->annotateArea = new AnnotateArea(this->annotations, this->SPAnnotate);
 
     // embed it into a ScrollArea, so that it can handle big images
     this->annotateScrollArea = new QScrollArea;
@@ -317,26 +318,15 @@ void MainWindow::loadConfiguration()
 
 }
 
-/*
-void MainWindow::save()
+
+void MainWindow::configureSuperPixels()
 {
-    QAction *action = qobject_cast<QAction *>(sender());
-    QByteArray fileFormat = action->data().toByteArray();
-    saveFile(fileFormat);
+    ParamsQEditorWindow *configWindow = new ParamsQEditorWindow(this->SPAnnotate);
+    configWindow->show();
 }
-*/
 
 
 
-
-/*
-void MainWindow::penColor()
-{
-    QColor newColor = QColorDialog::getColor(this->annotateArea->penColor());
-    if (newColor.isValid())
-        this->annotateArea->setPenColor(newColor);
-}
-*/
 
 void MainWindow::setPenWidth()
 {
@@ -349,6 +339,8 @@ void MainWindow::setPenWidth()
         this->annotateArea->setPenWidth(newWidth);
 }
 
+
+
 void MainWindow::increasePenWidth()
 {
     int incr = 1;
@@ -357,6 +349,8 @@ void MainWindow::increasePenWidth()
     this->annotateArea->setPenWidth(QtCvUtils::getMin(this->annotateArea->penWidth()+incr, 62));
 }
 
+
+
 void MainWindow::decreasePenWidth()
 {
     int decr = 1;
@@ -364,6 +358,8 @@ void MainWindow::decreasePenWidth()
         decr = (int)this->annotateArea->getScale();
     this->annotateArea->setPenWidth(QtCvUtils::getMax(this->annotateArea->penWidth()-decr, 1));
 }
+
+
 
 void MainWindow::switchPenStyle()
 {
@@ -379,6 +375,8 @@ void MainWindow::setZoomToOne()
 {
     this->annotateArea->setScale(1.);
 }
+
+
 
 void MainWindow::increaseZoom()
 {
@@ -407,6 +405,8 @@ void MainWindow::increaseZoom()
 
     this->imageSizeAdjustedByFactor(newScale / prevScale);
 }
+
+
 
 void MainWindow::decreaseZoom()
 {
@@ -553,7 +553,7 @@ void MainWindow::createActions()
 
     this->clearScreenAct = new QAction(tr("&Clear Annotations"), this);
     //this->clearScreenAct->setShortcut(tr("Ctrl+L"));
-    connect(this->clearScreenAct, SIGNAL(triggered()), this->annotateArea, SLOT(clearImage()));
+    connect(this->clearScreenAct, SIGNAL(triggered()), this->annotateArea, SLOT(clearImageAnnotations()));
 
 
     this->checkSelectedAct = new QAction(tr("Check the Selected Annotation"), this);
@@ -562,6 +562,16 @@ void MainWindow::createActions()
     connect(this->uncheckSelectedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckSelected()));
     this->uncheckAllAct = new QAction(tr("Uncheck All annotations"), this);
     connect(this->uncheckAllAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckAll()));
+
+
+
+
+    this->configureSuperPixelsAct = new QAction(tr("SuperPixels Settings"), this);
+    connect(this->configureSuperPixelsAct, SIGNAL(triggered()), this, SLOT(configureSuperPixels()));
+    this->computeSuperPixelsAct = new QAction(tr("Compute the Super Pixels Map"), this);
+    connect(this->computeSuperPixelsAct, SIGNAL(triggered()), this->annotateArea, SLOT(computeSuperPixelsMap()));
+    this->expandSelectedToSuperPixelAct = new QAction(tr("Expand the Selected Annotation"), this);
+    connect(this->expandSelectedToSuperPixelAct, SIGNAL(triggered()), this->annotateArea, SLOT(growAnnotationBySP()));
 
 
 
@@ -582,6 +592,8 @@ void MainWindow::createActions()
     this->uncheckSelectedAct->setShortcut(Qt::Key_U);
     this->uncheckAllAct->setShortcut(Qt::ALT + Qt::Key_U);
 
+    this->computeSuperPixelsAct->setShortcut(Qt::ALT + Qt::Key_P);
+    this->expandSelectedToSuperPixelAct->setShortcut(Qt::SHIFT + Qt::Key_E);
 
 
 
@@ -636,18 +648,29 @@ void MainWindow::createMenus()
     this->optionMenu->addAction(this->uncheckAllAct);
     this->optionMenu->addSeparator();
 
+
+    this->imageProcessingMenu = new QMenu(tr("&Image Processing"), this);
+    this->imageProcessingMenu->addAction(this->computeSuperPixelsAct);
+    this->imageProcessingMenu->addAction(this->expandSelectedToSuperPixelAct);
+
+
+
     // this->settingsMenu = this->optionMenu->addMenu(tr("&Settings..."));
     this->settingsMenu = new QMenu(tr("&Settings"), this);
     this->settingsMenu->addAction(this->loadClassesConfigAct);
+    this->settingsMenu->addAction(this->configureSuperPixelsAct);
 
 
     this->helpMenu = new QMenu(tr("&Help"), this);
     this->helpMenu->addAction(this->aboutAct);
     //this->helpMenu->addAction(this->aboutQtAct);
 
+
+
     menuBar()->addMenu(this->fileMenu);
     menuBar()->addMenu(this->viewMenu);
     menuBar()->addMenu(this->optionMenu);
+    menuBar()->addMenu(this->imageProcessingMenu);
     menuBar()->addMenu(this->settingsMenu);
     menuBar()->addMenu(this->helpMenu);
 }

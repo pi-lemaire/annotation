@@ -63,6 +63,10 @@
 #include "DialogClassSelection.h"
 #include "AnnotationsBrowser.h"
 
+#include "SuperPixelsAnnotate.h"
+#include "ParamsQEditorWindow.h"
+
+
 
 
 
@@ -94,6 +98,7 @@ private slots:
     void closeFile();
 
     void loadConfiguration();
+    void configureSuperPixels();
 
     void setPenWidth();
     void increasePenWidth();
@@ -123,18 +128,28 @@ private:
 
     int knownHScrollValue, knownVScrollValue;
 
-
-
     DialogClassSelection *classSelection;
     AnnotationsBrowser *annotsBrowser;
+
+
+
+    AnnotationsSet *annotations;
+    SuperPixelsAnnotate *SPAnnotate;
+
+
+
 
 
 
     QMenu *fileMenu;
     QMenu *viewMenu;
     QMenu *optionMenu;
+    QMenu *imageProcessingMenu;
     QMenu *helpMenu;
     QMenu *settingsMenu;
+
+
+
 
     QAction *openImageAct;
     QAction *openVideoAct;
@@ -162,12 +177,19 @@ private:
     // browser and selection related actionss
     QAction *checkSelectedAct, *uncheckSelectedAct, *uncheckAllAct;
 
+
+    // superpixels related stuff
+    QAction *configureSuperPixelsAct, *computeSuperPixelsAct, *expandSelectedToSuperPixelAct;
+
+
     QAction *printAct;
     QAction *clearScreenAct;
     QAction *aboutAct;
     //QAction *aboutQtAct;
 
-    AnnotationsSet *annotations;
+
+
+
 };
 
 #endif
