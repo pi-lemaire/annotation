@@ -33,7 +33,8 @@ HEADERS       = \
     ParamsHandler.h \
     ParamsQEditorLine.h \
     ParamsQEditorWindow.h \
-    SuperPixelsAnnotate.h
+    SuperPixelsAnnotate.h \
+    OptFlowTracking.h
 SOURCES       = main.cpp \
     AnnotateArea.cpp \
     AnnotationsSet.cpp \
@@ -42,7 +43,8 @@ SOURCES       = main.cpp \
     MainWindow.cpp \
     ParamsQEditorWindow.cpp \
     ParamsQEditorLine.cpp \
-    SuperPixelsAnnotate.cpp
+    SuperPixelsAnnotate.cpp \
+    OptFlowTracking.cpp
 
 # install
 target.path = $$[QT_INSTALL_EXAMPLES]/widgets/widgets/scribble

@@ -62,9 +62,10 @@
 #include "AnnotateArea.h"
 #include "DialogClassSelection.h"
 #include "AnnotationsBrowser.h"
+#include "ParamsQEditorWindow.h"
 
 #include "SuperPixelsAnnotate.h"
-#include "ParamsQEditorWindow.h"
+#include "OptFlowTracking.h"
 
 
 
@@ -99,6 +100,7 @@ private slots:
 
     void loadConfiguration();
     void configureSuperPixels();
+    void configureOFTracking();
 
     void setPenWidth();
     void increasePenWidth();
@@ -135,6 +137,7 @@ private:
 
     AnnotationsSet *annotations;
     SuperPixelsAnnotate *SPAnnotate;
+    OptFlowTracking *OFTracking;
 
 
 
@@ -180,6 +183,10 @@ private:
 
     // superpixels related stuff
     QAction *configureSuperPixelsAct, *computeSuperPixelsAct, *expandSelectedToSuperPixelAct;
+
+    // optical flow tracking related stuff
+    QAction *configureOFTrackingAct, *OFTrackToNextFrameAct;
+
 
 
     QAction *printAct;

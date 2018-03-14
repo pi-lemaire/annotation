@@ -1608,7 +1608,7 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
 
 
 
-int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLeftCorner, int whichClass, const cv::Point2i& annotStartingPoint)
+int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLeftCorner, int whichClass, const cv::Point2i& annotStartingPoint, int forceObjectId)
 {
     // add an annotation.
     // mask is in CV_8UC1 format, whatever is not zero belongs to the object.
@@ -1629,7 +1629,11 @@ int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLef
     int objectId = 0;
     bool usedDefaultObjectId = true;
 
-    if (this->config.getProperty(whichClass).classType == _ACT_MultipleObjects)
+    if (forceObjectId != -1)
+    {
+        objectId = forceObjectId;
+    }
+    else if (this->config.getProperty(whichClass).classType == _ACT_MultipleObjects)
     {
         // not an uniform class, we have to look at where the annotation started first :
         // is it already part of an object of the same class?

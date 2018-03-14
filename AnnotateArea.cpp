@@ -64,12 +64,14 @@
 
 // public region
 
-AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnot, QWidget *parent)
+AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnot, OptFlowTracking* OFTrack, QWidget *parent)
     : QWidget(parent)
 {
     this->annotations = annotsSet;
 
     this->SPAnnotate = SPAnnot;
+
+    this->OFTracking = OFTrack;
 
     // ensuring that the widget is always referenced to the top left corner
     setAttribute(Qt::WA_StaticContents);
@@ -472,6 +474,36 @@ void AnnotateArea::growAnnotationBySP()
     }
 }
 
+
+
+
+void AnnotateArea::OFTrackToNextFrame()
+{
+    // this is almost the same as displayNextFrame
+    AnnotationObject previouslySelectedObj = this->annotations->getRecord().getAnnotationById(this->selectedObjectId);
+
+    if (this->annotations->loadNextFrame())
+    {
+        // trackAnnotations should do everything that's needed?
+        this->OFTracking->trackAnnotations();
+
+        // preselect the same object than what was previously selected
+        this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
+                                                                                  previouslySelectedObj.ClassId,
+                                                                                  previouslySelectedObj.ObjectId );
+        // if no object corresponds, it will be -1 - exactly what we need
+
+        this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
+
+        this->updatePaintImages();
+
+        this->selectAnnotation(this->selectedObjectId);
+
+        // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
+
+        update();
+    }
+}
 
 
 

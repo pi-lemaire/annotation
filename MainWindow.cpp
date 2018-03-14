@@ -69,11 +69,11 @@ MainWindow::MainWindow()
     // first, generate the "core" object that will handle the annotations
     this->annotations = new AnnotationsSet();
     this->SPAnnotate = new SuperPixelsAnnotate(this->annotations);
-
+    this->OFTracking = new OptFlowTracking(this->annotations);
 
 
     // generate the interface, give the right pointer
-    this->annotateArea = new AnnotateArea(this->annotations, this->SPAnnotate);
+    this->annotateArea = new AnnotateArea(this->annotations, this->SPAnnotate, this->OFTracking);
 
     // embed it into a ScrollArea, so that it can handle big images
     this->annotateScrollArea = new QScrollArea;
@@ -325,7 +325,11 @@ void MainWindow::configureSuperPixels()
     configWindow->show();
 }
 
-
+void MainWindow::configureOFTracking()
+{
+    ParamsQEditorWindow *configWindow = new ParamsQEditorWindow(this->OFTracking);
+    configWindow->show();
+}
 
 
 void MainWindow::setPenWidth()
@@ -574,6 +578,10 @@ void MainWindow::createActions()
     connect(this->expandSelectedToSuperPixelAct, SIGNAL(triggered()), this->annotateArea, SLOT(growAnnotationBySP()));
 
 
+    this->configureOFTrackingAct = new QAction(tr("Optical Flow Tracking Settings"), this);
+    connect(this->configureOFTrackingAct, SIGNAL(triggered()), this, SLOT(configureOFTracking()));
+    this->OFTrackToNextFrameAct = new QAction(tr("Track to next frame using Optical Flow"), this);
+    connect(this->OFTrackToNextFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(OFTrackToNextFrame()));
 
 
 
@@ -595,6 +603,7 @@ void MainWindow::createActions()
     this->computeSuperPixelsAct->setShortcut(Qt::ALT + Qt::Key_P);
     this->expandSelectedToSuperPixelAct->setShortcut(Qt::SHIFT + Qt::Key_E);
 
+    this->OFTrackToNextFrameAct->setShortcut(Qt::SHIFT + Qt::Key_T);
 
 
     this->aboutAct = new QAction(tr("&About"), this);
@@ -652,6 +661,8 @@ void MainWindow::createMenus()
     this->imageProcessingMenu = new QMenu(tr("&Image Processing"), this);
     this->imageProcessingMenu->addAction(this->computeSuperPixelsAct);
     this->imageProcessingMenu->addAction(this->expandSelectedToSuperPixelAct);
+    this->imageProcessingMenu->addSeparator();
+    this->imageProcessingMenu->addAction(this->OFTrackToNextFrameAct);
 
 
 
@@ -659,6 +670,9 @@ void MainWindow::createMenus()
     this->settingsMenu = new QMenu(tr("&Settings"), this);
     this->settingsMenu->addAction(this->loadClassesConfigAct);
     this->settingsMenu->addAction(this->configureSuperPixelsAct);
+    this->settingsMenu->addAction(this->configureOFTrackingAct);
+
+
 
 
     this->helpMenu = new QMenu(tr("&Help"), this);

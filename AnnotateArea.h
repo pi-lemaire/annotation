@@ -64,6 +64,7 @@
 #include "AnnotationsSet.h"
 
 #include "SuperPixelsAnnotate.h"
+#include "OptFlowTracking.h"
 
 #include <opencv2/opencv.hpp>
 
@@ -87,7 +88,7 @@ class AnnotateArea : public QWidget
     Q_OBJECT
 
 public:
-    AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnotate, QWidget *parent = 0);
+    AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnnotate, OptFlowTracking* OFTrack, QWidget *parent = 0);
 
     bool openImage(const QString &fileName);
     bool openVideo(const QString &fileName);
@@ -129,6 +130,7 @@ public slots:
 
     void computeSuperPixelsMap();
     void growAnnotationBySP();
+    void OFTrackToNextFrame();
 
 
 
@@ -181,6 +183,7 @@ private:
 
     AnnotationsSet *annotations;
     SuperPixelsAnnotate* SPAnnotate;
+    OptFlowTracking* OFTracking;
 };
 
 #endif
