@@ -313,6 +313,11 @@ void MainWindow::loadConfiguration()
             this->classSelection->show();
             this->classSelection->setWindowTitle(tr("Class Selection"));
             this->classSelection->move(100, 100);
+
+            QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotateArea, SLOT(selectClassId(int)));
+            QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotsBrowser, SLOT(setClassSelected(int)));
+
+            this->annotateArea->selectClassId(1);
         }
     }
 
@@ -324,6 +329,7 @@ void MainWindow::configureSuperPixels()
     ParamsQEditorWindow *configWindow = new ParamsQEditorWindow(this->SPAnnotate);
     configWindow->show();
 }
+
 
 void MainWindow::configureOFTracking()
 {

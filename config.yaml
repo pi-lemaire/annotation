@@ -2,8 +2,8 @@
 ---
 AnnotationsSet:
    Configuration:
-      ImageFilesNamingRule: "%OrImPa%%OrImFiNa%_annotations/%FrNu%.png"
-      SummaryFileNamingRule: "%OrImPa%%OrImFiNa%_annotations/summary.yaml"
+      ImageFilesNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/%FrNu%.png"
+      SummaryFileNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/summary.yaml"
       ClassesDefinitions:
          - { Name:Road, Type:0, DispColRGB:[ 85, 85, 85 ],
              IdRecRangeMinBGR:[ 127, 127, 0 ], IdRecRangeMaxBGR:[ 0, 0,
@@ -13,7 +13,7 @@ AnnotationsSet:
              255 ] }
          - { Name:Truck, Type:1, DispColRGB:[ 0, 255, 0 ],
              IdRecRangeMinBGR:[ 0, 0, 126 ], IdRecRangeMaxBGR:[ 255, 255,
-             255 ] }
+             126 ] }
          - { Name:Utility, Type:1, DispColRGB:[ 0, 0, 255 ],
              IdRecRangeMinBGR:[ 0, 0, 0 ], IdRecRangeMaxBGR:[ 255, 255,
              0 ] }
