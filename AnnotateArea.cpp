@@ -597,7 +597,7 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
                                                                        cv::Point2i(this->firstAnnotPoint.x(), this->firstAnnotPoint.y()) );
 
             // update the ObjectROI in case the new annotation is an increment to a previous one
-            this->ObjectROI = QtCvUtils::cvRect2iToQRect( this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox );
+            this->ObjectROI |= QtCvUtils::cvRect2iToQRect( this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox );
         }
         else
         {
@@ -607,8 +607,8 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
 
 
         // specify that we have to update the contours image
-        // - update with a 1 pixel wide surrounding because it may have affected surrounding objects
-        this->updatePaintImages(this->ObjectROI.adjusted(-1,-1,1,1), true);
+        // - update with a 2 pixel wide surrounding because it may have affected surrounding objects
+        this->updatePaintImages(this->ObjectROI.adjusted(-2,-2,2,2));
 
 
 

@@ -13,10 +13,12 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     this->browser->setOpenLinks(false);
 
     // the annotations manipulation buttons
-    this->buttonGroupAnnotations = new QPushButton(tr("&Group", "Annotations Browser"));
-    this->buttonSeparateAnnotations = new QPushButton(tr("S&eparate", "Annotation Browser"));
-    this->buttonDeleteAnnotations = new QPushButton(tr("&Delete", "Annotation Browser"));
+    this->buttonGroupAnnotations =       new QPushButton(tr("&Group", "Annotations Browser"));
+    this->buttonSeparateAnnotations =    new QPushButton(tr("S&eparate", "Annotation Browser"));
+    this->buttonDeleteAnnotations =      new QPushButton(tr("&Delete", "Annotation Browser"));
     this->buttonSwitchAnnotationsClass = new QPushButton(tr("S&witch Class", "Annotation Browser"));
+    this->buttonLockAnnotations =        new QPushButton(tr("&Lock", "Annotation Browser"));
+    this->buttonUnlockAnnotations =      new QPushButton(tr("&Unlock", "Annotation Browser"));
 
     // then the layout
     this->browserLayout = new QGridLayout;
@@ -25,15 +27,19 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     this->browserLayout->addWidget(this->buttonSwitchAnnotationsClass, 1, 1, 1, 1);
     this->browserLayout->addWidget(this->buttonGroupAnnotations, 2, 0, 1, 1);
     this->browserLayout->addWidget(this->buttonSeparateAnnotations, 2, 1, 1, 1);
+    this->browserLayout->addWidget(this->buttonLockAnnotations, 3, 0, 1, 1);
+    this->browserLayout->addWidget(this->buttonUnlockAnnotations, 3, 1, 1, 1);
 
     // set the layout as the main thing
     this->setLayout(this->browserLayout);
 
     // connect the buttons
-    QObject::connect(this->buttonGroupAnnotations, SIGNAL(clicked()), this, SLOT(GroupAnnotationsClicked()));
-    QObject::connect(this->buttonSeparateAnnotations, SIGNAL(clicked()), this, SLOT(SeparateAnnotationsClicked()));
-    QObject::connect(this->buttonDeleteAnnotations, SIGNAL(clicked()), this, SLOT(DeleteAnnotationsClicked()));
+    QObject::connect(this->buttonGroupAnnotations,       SIGNAL(clicked()), this, SLOT(GroupAnnotationsClicked()));
+    QObject::connect(this->buttonSeparateAnnotations,    SIGNAL(clicked()), this, SLOT(SeparateAnnotationsClicked()));
+    QObject::connect(this->buttonDeleteAnnotations,      SIGNAL(clicked()), this, SLOT(DeleteAnnotationsClicked()));
     QObject::connect(this->buttonSwitchAnnotationsClass, SIGNAL(clicked()), this, SLOT(SwitchAnnotationsClassClicked()));
+    QObject::connect(this->buttonLockAnnotations,        SIGNAL(clicked()), this, SLOT(LockAnnotationsClicked()));
+    QObject::connect(this->buttonUnlockAnnotations,      SIGNAL(clicked()), this, SLOT(UnlockAnnotationsClicked()));
 
     // connect the browser
     QObject::connect(this->browser, SIGNAL(anchorClicked(QUrl)), this, SLOT(BrowserLinkClicked(QUrl)));
@@ -85,6 +91,7 @@ void AnnotationsBrowser::checkSelected()
             newSel.frameId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).FrameNumber;
             newSel.classId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ClassId;
             newSel.objectId = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ObjectId;
+            newSel.locked = this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).locked;
 
             this->linesChecked.push_back(newSel);
 
@@ -231,6 +238,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
             QString boldTagClosed = "";
             QString sourceTag = "";
             QString checkedCharacter = "[_]";
+            QString lockedCharacter = (currObj.locked ? "-L-" : "-u-");
 
             for (size_t k=0; k<this->linesChecked.size(); k++)
             {
@@ -256,6 +264,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
             htmlCode += "<td align=left>" + sourceTag + boldTagOpen + selectionLink + tr("Frame", "Annotation Browser") + " " + QString::number(currObj.FrameNumber) + "</a>" + boldTagClosed + "</td>";
             htmlCode += "<td align=left>- " + boldTagOpen + selectionLink + QString::fromStdString(this->annots->getConfig().getProperty(currObj.ClassId).className) + "</a>" + boldTagClosed + " -</td>";
             htmlCode += "<td align=left>" + boldTagOpen + selectionLink + tr("Object #", "Annotation Browser") + QString::number(currObj.ObjectId) + "</a>" + boldTagClosed + "</td>";
+            htmlCode += "<td align=middle>" + boldTagOpen + lockedCharacter + boldTagClosed + "</td>";
             htmlCode += "<td align=center>" + boldTagOpen + "<a href='chk_" + QString::number(currAnnotId) + "'>" + checkedCharacter + "</a>" + boldTagClosed + "</td>";
             htmlCode += "</tr>";
         }
@@ -363,9 +372,10 @@ void AnnotationsBrowser::BrowserLinkClicked(const QUrl& url)
 
             // storing additional information will allow us to adapt when some annotation operations
             // affect the various IDs recorded
-            newSel.frameId = this->annots->getRecord().getAnnotationById(linkId).FrameNumber;
-            newSel.classId = this->annots->getRecord().getAnnotationById(linkId).ClassId;
+            newSel.frameId  = this->annots->getRecord().getAnnotationById(linkId).FrameNumber;
+            newSel.classId  = this->annots->getRecord().getAnnotationById(linkId).ClassId;
             newSel.objectId = this->annots->getRecord().getAnnotationById(linkId).ObjectId;
+            newSel.locked   = this->annots->getRecord().getAnnotationById(linkId).locked;
 
             this->linesChecked.push_back(newSel);
         }
@@ -376,7 +386,27 @@ void AnnotationsBrowser::BrowserLinkClicked(const QUrl& url)
 }
 
 
+void AnnotationsBrowser::LockAnnotationsClicked()
+{
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        this->annots->setObjectLock(this->linesChecked[k].recordId, true);
+        this->linesChecked[k].locked = true;
+    }
 
+    this->updateBrowser(this->currentAnnotSelected);
+}
+
+void AnnotationsBrowser::UnlockAnnotationsClicked()
+{
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        this->annots->setObjectLock(this->linesChecked[k].recordId, false);
+        this->linesChecked[k].locked = false;
+    }
+
+    this->updateBrowser(this->currentAnnotSelected);
+}
 
 
 void AnnotationsBrowser::setButtonsActivation()
@@ -385,11 +415,16 @@ void AnnotationsBrowser::setButtonsActivation()
     this->buttonGroupAnnotations->setEnabled(false);
     this->buttonSeparateAnnotations->setEnabled(false);
     this->buttonSwitchAnnotationsClass->setEnabled(false);
+    this->buttonLockAnnotations->setEnabled(false);
+    this->buttonUnlockAnnotations->setEnabled(false);
 
 
     // no deletion available if no line is checked
     this->buttonDeleteAnnotations->setEnabled(this->linesChecked.size()>0);
 
+
+    const char LUSTrueNumberGoal = 1+2+4;
+    char LUSTrueNumber = 0;
 
     // check if some checked object can change class
     for (size_t k=0; k<this->linesChecked.size(); k++)
@@ -397,8 +432,21 @@ void AnnotationsBrowser::setButtonsActivation()
         if (linesChecked[k].classId != this->currentClassSelected)
         {
             this->buttonSwitchAnnotationsClass->setEnabled(true);
-            break;
+            LUSTrueNumber |= 1;
         }
+        if (linesChecked[k].locked)
+        {
+            this->buttonUnlockAnnotations->setEnabled(true);
+            LUSTrueNumber |= 2;
+        }
+        else
+        {
+            this->buttonLockAnnotations->setEnabled(true);
+            LUSTrueNumber |= 4;
+        }
+
+        if (LUSTrueNumber == LUSTrueNumberGoal)
+            break;
     }
 
 

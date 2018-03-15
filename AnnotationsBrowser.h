@@ -15,6 +15,7 @@
 struct annotSelection
 {
     int recordId, frameId, classId, objectId;
+    bool locked;
 };
 
 
@@ -43,6 +44,8 @@ private slots:
     void DeleteAnnotationsClicked();
     void SwitchAnnotationsClassClicked();
     void BrowserLinkClicked(const QUrl&);
+    void LockAnnotationsClicked();
+    void UnlockAnnotationsClicked();
 
 
 signals:
@@ -55,7 +58,7 @@ private:
 
     std::vector<int> getCheckedRecordIds() const;
 
-    QPushButton *buttonGroupAnnotations, *buttonSeparateAnnotations, *buttonDeleteAnnotations, *buttonSwitchAnnotationsClass;
+    QPushButton *buttonGroupAnnotations, *buttonSeparateAnnotations, *buttonDeleteAnnotations, *buttonSwitchAnnotationsClass, *buttonLockAnnotations, *buttonUnlockAnnotations;
     QGridLayout *browserLayout;
     QTextBrowser *browser;
 

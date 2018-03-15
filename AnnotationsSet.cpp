@@ -234,6 +234,10 @@ int AnnotationsRecord::addNewAnnotation(const AnnotationObject& annot)
 {
     // push a new annotation object, at the end of the main vector - returns the new annotation index... if it is not an update!!
 
+    // verify that this object is possible
+    if ((annot.ClassId<1) || (annot.ObjectId<0) || (annot.FrameNumber<0))
+        return -1;
+
     // first, we must verify whether this is actually an update, or a brand new annotation
     int searchRes = this->searchAnnotation(annot.FrameNumber, annot.ClassId, annot.ObjectId);
     if (searchRes != -1)
@@ -672,7 +676,25 @@ void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
 }
 
 
+/*
+void AnnotationsRecord::lockObject(int id)
+{
+    if (id<0 || id>=(int)this->record.size())
+        return;
 
+    this->record[id].locked = true;
+}
+
+
+
+void AnnotationsRecord::unlockObject(int id)
+{
+    if (id<0 || id>=(int)this->record.size())
+        return;
+
+    this->record[id].locked = false;
+}
+*/
 
 
 
@@ -1698,6 +1720,13 @@ int AnnotationsSet::addAnnotation(const cv::Mat& mask, const cv::Point2i& topLef
                     Point2i currObjectIds = Point2i( this->accessCurrentAnnotationsClasses().at<int16_t>(i+topLeftCorner.y, j+topLeftCorner.x),
                                                      this->accessCurrentAnnotationsIds().at<int32_t>(i+topLeftCorner.y, j+topLeftCorner.x) );
 
+
+                    if ( this->config.getProperty(currObjectIds.x).locked ||
+                         this->annotsRecord.getAnnotationById(this->annotsRecord.searchAnnotation(this->currentImgIndex, currObjectIds.x, currObjectIds.y)).locked )
+                        // the object or the class is locked - avoid
+                        continue;
+
+
                     // is it different from the one we're annotating right now?
                     if (currObjectIds != currClassValues)
                     {
@@ -1813,6 +1842,11 @@ void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::
                 {
                     Point2i currObjectIds = Point2i( this->accessCurrentAnnotationsClasses().at<int16_t>(i+topLeftCorner.y, j+topLeftCorner.x),
                                                      this->accessCurrentAnnotationsIds().at<int32_t>(i+topLeftCorner.y, j+topLeftCorner.x) );
+
+                    if ( this->config.getProperty(currObjectIds.x).locked ||
+                         this->annotsRecord.getAnnotationById(this->annotsRecord.searchAnnotation(this->currentImgIndex, currObjectIds.x, currObjectIds.y)).locked )
+                        // the object or the class is locked - avoid
+                        continue;
 
                     bool noPreviousExample = true;
                     for (size_t k=0; k<affectedObjectsList.size(); k++)

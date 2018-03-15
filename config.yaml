@@ -11,9 +11,9 @@ AnnotationsSet:
          - { Name:Car, Type:1, DispColRGB:[ 255, 0, 0 ],
              IdRecRangeMinBGR:[ 0, 0, 127 ], IdRecRangeMaxBGR:[ 255, 255,
              255 ] }
-         - { Name:Truck, Type:1, DispColRGB:[ 0, 255, 0 ],
-             IdRecRangeMinBGR:[ 0, 0, 126 ], IdRecRangeMaxBGR:[ 255, 255,
-             126 ] }
+         - { Name:Truck, Type:1, DispColRGB:[ 0, 127, 0 ],
+             IdRecRangeMinBGR:[ 0, 0, 85 ], IdRecRangeMaxBGR:[ 255, 255,
+             100 ] }
          - { Name:Utility, Type:1, DispColRGB:[ 0, 0, 255 ],
-             IdRecRangeMinBGR:[ 0, 0, 0 ], IdRecRangeMaxBGR:[ 255, 255,
-             0 ] }
+             IdRecRangeMinBGR:[ 0, 0, 50 ], IdRecRangeMaxBGR:[ 255, 255,
+             84 ] }

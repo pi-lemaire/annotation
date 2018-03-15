@@ -86,13 +86,14 @@ const std::string _AnnotProp_YAMLKey_RecBGRMax  = "IdRecRangeMaxBGR";
 class AnnotationsProperties
 {
 public:
-    AnnotationsProperties() {}
-    AnnotationsProperties(const AnnotationsProperties& ap) : className(ap.className), classType(ap.classType),
+    AnnotationsProperties() { this->locked = false; }
+    AnnotationsProperties(const AnnotationsProperties& ap) : className(ap.className), classType(ap.classType), locked(ap.locked),
                                                              displayRGBColor(ap.displayRGBColor), minIdBGRRecRange(ap.minIdBGRRecRange), maxIdBGRRecRange(ap.maxIdBGRRecRange) {}
     AnnotationsProperties& operator=(const AnnotationsProperties& ap)
     {
         this->className = ap.className;
         this->classType = ap.classType;
+        this->locked = ap.locked;
         this->displayRGBColor = ap.displayRGBColor;
         this->minIdBGRRecRange = ap.minIdBGRRecRange;
         this->maxIdBGRRecRange = ap.maxIdBGRRecRange;
@@ -124,6 +125,7 @@ public:
     //int ClassId;
     std::string className;
     AnnotationClassType classType;
+    bool locked;
     cv::Vec3b displayRGBColor;
     cv::Vec3b minIdBGRRecRange, maxIdBGRRecRange; // available range for encoding both the Id and the class. In BGR!!!
                                             // when in uniform class type, max and min shall be identical. Either way, only the min value will be used
@@ -190,6 +192,7 @@ public:
     // default config stuff
     void setDefaultConfig();
 
+    void setClassLock(int id, bool lock) { if ((id<1)||(id>(int)this->propsSet.size())) return; this->propsSet[id-1].locked=lock; }
 
 
     void writeContentToYaml(cv::FileStorage& fs) const;
@@ -225,9 +228,9 @@ const std::string _AnnotObj_YAMLKey_BBox  = "BB";
 class AnnotationObject
 {
 public:
-    AnnotationObject() : ClassId(0), ObjectId(0), FrameNumber(0) {}
-    AnnotationObject(const AnnotationObject& ao) : ClassId(ao.ClassId), ObjectId(ao.ObjectId), FrameNumber(ao.FrameNumber), BoundingBox(ao.BoundingBox) {}
-    AnnotationObject& operator=(const AnnotationObject& ao) { this->ClassId=ao.ClassId; this->ObjectId=ao.ObjectId; this->FrameNumber=ao.FrameNumber; this->BoundingBox=ao.BoundingBox; return *(this); }
+    AnnotationObject() : ClassId(0), ObjectId(0), FrameNumber(0), locked(false) {}
+    AnnotationObject(const AnnotationObject& ao) : ClassId(ao.ClassId), ObjectId(ao.ObjectId), FrameNumber(ao.FrameNumber), BoundingBox(ao.BoundingBox), locked(ao.locked) {}
+    AnnotationObject& operator=(const AnnotationObject& ao) { this->ClassId=ao.ClassId; this->ObjectId=ao.ObjectId; this->FrameNumber=ao.FrameNumber; this->BoundingBox=ao.BoundingBox; this->locked=ao.locked; return *(this); }
 
     void write(cv::FileStorage& fs) const
     {
@@ -249,6 +252,7 @@ public:
     int ObjectId;
     int FrameNumber;
     cv::Rect2i BoundingBox;
+    bool locked;
 };
 
 
@@ -307,6 +311,9 @@ public:
     void clear();   // the ultimate killer - simply clear all of the vectors
 
 
+    void setObjectLock(int id, bool lock) { if (id<0 || id>=(int)this->record.size()) return; this->record[id].locked = lock; }
+
+
     void writeContentToYaml(cv::FileStorage& fs) const;
     void readContentFromYaml(const cv::FileNode& fnd);
 
@@ -360,6 +367,8 @@ public:
     const cv::Mat& getCurrentAnnotationsIds() const;
     const cv::Mat& getCurrentContours() const;
 
+
+
     // access any image within the buffer
     const cv::Mat& getOriginalImg(int id) const;
     const cv::Mat& getAnnotationsClasses(int id) const;
@@ -412,6 +421,12 @@ public:
 
 
     bool thereWereChangesPerformedUponCurrentAnnot() const { return this->changesPerformedUponCurrentAnnot; }
+
+
+
+    void setObjectLock(int objectId, bool lock) { this->annotsRecord.setObjectLock(objectId, lock); }
+    void setClassLock(int classId, bool lock) { this->config.setClassLock(classId, lock); }
+
 
 
 
@@ -491,6 +506,11 @@ private:
     void mergeIntraFrameAnnotations(int newClassId, int newObjectId, const std::vector<int>& listObjects);
 
     void computeFrameContours(int frameId=-1, const cv::Rect2i& ROI=cv::Rect2i(-3,-3,0,0));
+
+
+
+    bool isAnnotLockedOnCurrentFrame(int classId, int objId) const;
+
 
 
 

@@ -249,6 +249,8 @@ void MainWindow::loadAnnotations()
         {
             this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
             this->annotateArea->openAnnotations(fileName);
+
+            this->resetClassSelection();
         }
     }
 }
@@ -307,20 +309,25 @@ void MainWindow::loadConfiguration()
         if (this->annotations->loadConfiguration(fileName.toStdString()))
         {
             // don't be shy - just kill the thing and load it back
-            delete this->classSelection;
-
-            this->classSelection = new DialogClassSelection(this->annotations, this, Qt::Tool);
-            this->classSelection->show();
-            this->classSelection->setWindowTitle(tr("Class Selection"));
-            this->classSelection->move(100, 100);
-
-            QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotateArea, SLOT(selectClassId(int)));
-            QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotsBrowser, SLOT(setClassSelected(int)));
-
-            this->annotateArea->selectClassId(1);
+            this->resetClassSelection();
         }
     }
 
+}
+
+void MainWindow::resetClassSelection()
+{
+    delete this->classSelection;
+
+    this->classSelection = new DialogClassSelection(this->annotations, this, Qt::Tool);
+    this->classSelection->show();
+    this->classSelection->setWindowTitle(tr("Class Selection"));
+    this->classSelection->move(100, 100);
+
+    QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotateArea, SLOT(selectClassId(int)));
+    QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotsBrowser, SLOT(setClassSelected(int)));
+
+    this->annotateArea->selectClassId(1);
 }
 
 

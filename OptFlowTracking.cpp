@@ -75,7 +75,8 @@ void OptFlowTracking::trackAnnotations()
 {
     // at first, find the bounding box - we're not going to work on the whole image if it is not required
 
-    const vector<int>& origAnnotsIds = this->originAnnots->getRecord().getFrameContentIds(this->originAnnots->getCurrentFramePosition()-1);
+    // copy the original annotations references
+    const vector<int> origAnnotsIds = this->originAnnots->getRecord().getFrameContentIds(this->originAnnots->getCurrentFramePosition()-1);
 
     if (origAnnotsIds.size()<1)
         return; // nothing to track at all
@@ -260,25 +261,25 @@ void OptFlowTracking::findAffineTransformParams(const std::vector<cv::Point2f>& 
     // filling the corresponding values
     for (int k=0; k<finalSolutionsUsed; k++)
     {
-        int i = round(subSampling * (float)k);
-        if (i>=(int)input.size())
+        long int i = round(subSampling * (float)k);
+        if (i>=(long int)input.size())
             break;  // some safety check
 
-        leftHandMat.at<double>(i*2  , 0) = input[i].x;
-        leftHandMat.at<double>(i*2  , 1) = input[i].y;
-        leftHandMat.at<double>(i*2  , 2) = 1.;
-        leftHandMat.at<double>(i*2  , 3) = 0.;
-        leftHandMat.at<double>(i*2  , 4) = 0.;
-        leftHandMat.at<double>(i*2  , 5) = 0.;
-        leftHandMat.at<double>(i*2+1, 0) = 0.;
-        leftHandMat.at<double>(i*2+1, 1) = 0.;
-        leftHandMat.at<double>(i*2+1, 2) = 0.;
-        leftHandMat.at<double>(i*2+1, 3) = input[i].x;
-        leftHandMat.at<double>(i*2+1, 4) = input[i].y;
-        leftHandMat.at<double>(i*2+1, 5) = 1.;
+        leftHandMat.at<double>(k*2  , 0) = input[i].x;
+        leftHandMat.at<double>(k*2  , 1) = input[i].y;
+        leftHandMat.at<double>(k*2  , 2) = 1.;
+        leftHandMat.at<double>(k*2  , 3) = 0.;
+        leftHandMat.at<double>(k*2  , 4) = 0.;
+        leftHandMat.at<double>(k*2  , 5) = 0.;
+        leftHandMat.at<double>(k*2+1, 0) = 0.;
+        leftHandMat.at<double>(k*2+1, 1) = 0.;
+        leftHandMat.at<double>(k*2+1, 2) = 0.;
+        leftHandMat.at<double>(k*2+1, 3) = input[i].x;
+        leftHandMat.at<double>(k*2+1, 4) = input[i].y;
+        leftHandMat.at<double>(k*2+1, 5) = 1.;
 
-        rightHandMat.at<double>(i*2  , 0) = output[i].x;
-        rightHandMat.at<double>(i*2+1, 0) = output[i].y;
+        rightHandMat.at<double>(k*2  , 0) = output[i].x;
+        rightHandMat.at<double>(k*2+1, 0) = output[i].y;
     }
 
     cv::Mat solution = cv::Mat::zeros(6,1,CV_64FC1);

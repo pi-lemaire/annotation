@@ -6,6 +6,7 @@
 #include <QGridLayout>
 #include <QVBoxLayout>
 #include <QMessageBox>
+#include <QDialogButtonBox>
 
 #include "AnnotationsSet.h"
 #include "QtCvUtils.h"
@@ -23,16 +24,20 @@ public:
 
 public slots:
     void OnClassSelect(QListWidgetItem *);
+    void OnClassCheck(QListWidgetItem *);
 
 
 signals:
     void classSelected(int classId);
+    // void classLocked(int classId);
 
 
 private:
     AnnotationsSet* annots;
     QVBoxLayout* topLayout;
+    // QDialogButtonBox* buttonBox;
     QListWidget *pListClasses;
+
 };
 
 #endif

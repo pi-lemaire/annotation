@@ -121,6 +121,7 @@ private:
     void createMenus();
     bool maybeSave();
     bool saveFile(const QByteArray &fileFormat);
+    void resetClassSelection();
 
     void imageSizeAdjustedByFactor(float);
 

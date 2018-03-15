@@ -15,6 +15,7 @@ DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* p
 
     // and here is the list of available classes
     pListClasses = new QListWidget();
+
     for (int iClass=1; iClass<=this->annots->getConfig().getPropsNumber(); iClass++)
     {
         // adding a small icon for more convenience
@@ -22,6 +23,8 @@ DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* p
         classColor.fill( QtCvUtils::cvVec3bToQColor(this->annots->getConfig().getProperty(iClass).displayRGBColor) );
         pListClasses->addItem( QString::fromStdString(this->annots->getConfig().getProperty(iClass).className) );
         pListClasses->item(iClass-1)->setIcon( QIcon(classColor) );
+        pListClasses->item(iClass-1)->setFlags(pListClasses->item(iClass-1)->flags() | Qt::ItemIsUserCheckable);
+        pListClasses->item(iClass-1)->setCheckState( (this->annots->getConfig().getProperty(iClass).locked ? Qt::Checked : Qt::Unchecked) );
     }
 
     // ensure that we can only select one class at a time
@@ -35,6 +38,7 @@ DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* p
 
     // already select the first item
     connect(pListClasses, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(OnClassSelect(QListWidgetItem*)));
+    connect(pListClasses, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(OnClassCheck(QListWidgetItem*)));
 }
 
 
@@ -51,4 +55,13 @@ void DialogClassSelection::OnClassSelect(QListWidgetItem *)
     // just send the signal that
     // don't forget the +1 since the numbering starts with 1
     emit classSelected( pListClasses->currentRow()+1 );
+}
+
+
+void DialogClassSelection::OnClassCheck(QListWidgetItem *item)
+{
+    for (int i=0; i<this->annots->getConfig().getPropsNumber(); i++)
+    {
+        this->annots->setClassLock( i+1, (pListClasses->item(i)->checkState()==Qt::Checked) );
+    }
 }
