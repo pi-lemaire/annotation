@@ -137,6 +137,14 @@ void OptFlowTracking::trackAnnotations()
 
         Mat newAnnotationMask = Mat::zeros(newBB.size(), CV_8UC1);
 
+
+
+        bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
+
+        Rect2i BBTracked;
+
+
+
         /*
         int deltaX = prevAnnot.BoundingBox.tl().x - newBB.tl().x;   // should always be greater than 0
         int deltaY = prevAnnot.BoundingBox.tl().y - newBB.tl().y;
@@ -183,11 +191,13 @@ void OptFlowTracking::trackAnnotations()
             const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
             const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
 
+            bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
+
             for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
             {
                 for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
                 {
-                    if ((prevClassMat.at<int16_t>(i,j)==prevAnnot.ClassId) && (prevObjIdMat.at<int32_t>(i,j)==prevAnnot.ObjectId))
+                    if ( BBClassOnly || ((prevClassMat.at<int16_t>(i,j)==prevAnnot.ClassId) && (prevObjIdMat.at<int32_t>(i,j)==prevAnnot.ObjectId)) )
                     {
                         // found an element of this annotation, store its position in both the newAnnotationMask matrix and the
                         origAnnotMask.at<uchar>(i-newBB.tl().y, j-newBB.tl().x) = 255;
@@ -198,7 +208,6 @@ void OptFlowTracking::trackAnnotations()
                         destPoints.push_back( Point2f( j - newBB.tl().x + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0],
                                                        i - newBB.tl().y + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1] ) );
                                                                                 // theoretical position in the tracked "newAnnotationMask" matrix
-
                     }
                 }
             }
@@ -207,14 +216,37 @@ void OptFlowTracking::trackAnnotations()
             Mat transform;
             this->findAffineTransformParams(originPoints, destPoints, transform);
 
-            warpAffine(origAnnotMask, newAnnotationMask, transform, origAnnotMask.size());
+            if (!BBClassOnly)
+            {
+                warpAffine(origAnnotMask, newAnnotationMask, transform, origAnnotMask.size());
 
-            threshold(newAnnotationMask, newAnnotationMask, 127, 255, CV_THRESH_BINARY);
+                threshold(newAnnotationMask, newAnnotationMask, 127, 255, CV_THRESH_BINARY);
+            }
+            else
+            {
+                // performing the transform over the 4 corners of the bounding box
+                std::vector<Point2f> origRecCoords, transformedRecCoords;
+                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.tl().x, prevAnnot.BoundingBox.tl().y));
+                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.tl().x, prevAnnot.BoundingBox.br().y));
+                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.br().x, prevAnnot.BoundingBox.br().y));
+                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.br().x, prevAnnot.BoundingBox.tl().y));
+
+                cv::transform(origRecCoords, transformedRecCoords, transform);
+
+                BBTracked = Rect2i(Point2i(transformedRecCoords[0].x, transformedRecCoords[0].y), Size2i(1,1));
+                for (size_t k=1; k<4; k++)
+                {
+                    BBTracked |= Rect2i(Point2i(transformedRecCoords[k].x, transformedRecCoords[k].y), Size2i(1,1));
+                }
+            }
+
         }
 
-
         // finally add the new annotation
-        this->originAnnots->addAnnotation(newAnnotationMask, newBB.tl(), prevAnnot.ClassId, Point2i(-1,-1), prevAnnot.ObjectId);
+        if (BBClassOnly)
+            this->originAnnots->addAnnotation(BBTracked.tl(), BBTracked.br(), prevAnnot.ClassId, prevAnnot.ObjectId);
+        else
+            this->originAnnots->addAnnotation(newAnnotationMask, newBB.tl(), prevAnnot.ClassId, Point2i(-1,-1), prevAnnot.ObjectId);
     }
 }
 

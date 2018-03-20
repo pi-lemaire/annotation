@@ -1708,7 +1708,7 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
 
 void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB)
 {
-    this->annotsRecord.updateBoundingBox(recordId, newBB);
+    this->annotsRecord.updateBoundingBox( recordId, newBB & Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()) );
 
     this->changesPerformedUponCurrentAnnot = true;
 }
@@ -1719,7 +1719,7 @@ void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB
 
 
 
-int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass)
+int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass, int forceObjectId)
 {
     if (whichClass<1 || whichClass>this->config.getPropsNumber())
         // wrong class number
@@ -1729,11 +1729,12 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
         return -1;
 
     // if this was called, this is necessarily a new annotation
-    int objectId = this->annotsRecord.getFirstAvailableObjectId(whichClass);
+    int objectId = (forceObjectId<0) ? this->annotsRecord.getFirstAvailableObjectId(whichClass) : forceObjectId;
 
     // store everything correctly
     AnnotationObject newAnnot;
     newAnnot.BoundingBox = cv::Rect2i(topLeftCorner, bottomRightCorner);  // we set +1 to the BR corner because this corner is not inclusive
+    newAnnot.BoundingBox &= cv::Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()); // ensuring that the new annotation is well inside the boundaries of the image
     newAnnot.ClassId = whichClass;
     newAnnot.ObjectId = objectId;
     newAnnot.FrameNumber = this->currentImgIndex;

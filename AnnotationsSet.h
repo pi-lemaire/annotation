@@ -445,7 +445,7 @@ public:
     void editAnnotationBoundingBox(int recordId, const cv::Rect2i& newBB);
 
 
-    int addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass);
+    int addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass, int forceObjectId=-1);
             // add an annotation.
             // mask is in CV_8UC1 format, whatever is not zero belongs to the object.
             // annotStartingPoint is there to know whether we add this to a previous annotation (in which case we merge both), or whether we start a new one

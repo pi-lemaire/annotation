@@ -422,8 +422,6 @@ void AnnotateArea::selectClassId(int classId)
     this->myPenColor = QtCvUtils::cvVec3bToQColor( this->annotations->getConfig().getProperty(classId).displayRGBColor );
 
     this->BBClassOnly = (this->annotations->getConfig().getProperty(classId).classType == _ACT_BoundingBoxOnly);
-
-    qDebug() << "BB edition mode : " << this->BBClassOnly;
 }
 
 
