@@ -80,6 +80,7 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnn
     //this->modified = false;
     this->scribbling = false;
     this->rubberMode = false;
+    this->BBClassOnly = false;
 
     this->scaleFactor = 1.0;
 
@@ -419,6 +420,10 @@ void AnnotateArea::selectClassId(int classId)
     this->selectedClass = classId;
     // cv::Vec3b classColor = this->annotations->getConfig().getProperty(classId).displayRGBColor;
     this->myPenColor = QtCvUtils::cvVec3bToQColor( this->annotations->getConfig().getProperty(classId).displayRGBColor );
+
+    this->BBClassOnly = (this->annotations->getConfig().getProperty(classId).classType == _ACT_BoundingBoxOnly);
+
+    qDebug() << "BB edition mode : " << this->BBClassOnly;
 }
 
 
@@ -513,34 +518,133 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        // the user starts drawing something with his left button.. store the position and record the status
-        this->lastPoint = this->adaptToScaleDiv(event->pos());
-        this->firstAnnotPoint = this->lastPoint;
+        if (!this->BBClassOnly)
+        {
+            // the user starts drawing something with his left button.. store the position and record the status
+            this->lastPoint = this->adaptToScaleDiv(event->pos());
+            this->firstAnnotPoint = this->lastPoint;
 
 
-        // filling the image ObjectImage. This image will record the pixels that were specifically annotated
-        // we fill it with color1, that sets all the pixels to 1. Then we will paint it black, and finally extract the darkest pixels
-        this->ObjectImage.fill(Qt::color1);
+            // filling the image ObjectImage. This image will record the pixels that were specifically annotated
+            // we fill it with color1, that sets all the pixels to 1. Then we will paint it black, and finally extract the darkest pixels
+            this->ObjectImage.fill(Qt::color1);
 
 
-        // also, in order to go faster, we record ROI data, so that we don't have to run through the whole image to know where something was painted
-        // .. but this implies some fiddling with ROIs
+            // also, in order to go faster, we record ROI data, so that we don't have to run through the whole image to know where something was painted
+            // .. but this implies some fiddling with ROIs
 
-        // remove the displayed part corresponding to the previous ROI
-        // also specify that nothing is selected anymore (it's useful for the bounding boxes display thing)
-        this->selectedObjectId = -1;
-        QRect previousROI = this->ObjectROI;
+            // remove the displayed part corresponding to the previous ROI
+            // also specify that nothing is selected anymore (it's useful for the bounding boxes display thing)
+            this->selectedObjectId = -1;
+            QRect previousROI = this->ObjectROI;
 
-        // update the contours because if an object was selected, it's likely to interfere
-        this->updatePaintImages(previousROI, true);
-        this->update( this->adaptToScaleMul(previousROI.adjusted(-2, -2, 2, 2)) );
+            // update the contours because if an object was selected, it's likely to interfere
+            this->updatePaintImages(previousROI, true);
+            this->update( this->adaptToScaleMul(previousROI.adjusted(-2, -2, 2, 2)) );
 
 
-        // at the (almost) last time, specify that we've entered in scribbling mode
-        this->scribbling = true;
+            // at the (almost) last time, specify that we've entered in scribbling mode
+            this->scribbling = true;
 
-        // start recording the right ROI
-        this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
+            // start recording the right ROI
+            this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
+        }
+        else
+        {
+            QPoint actualInImgPos = this->adaptToScaleDiv(event->pos());
+
+            // 2 cases (actually, just one but slightly different) : new annotation or edition
+            int selectedAnnot = this->annotations->getClosestBBFromPosition(actualInImgPos.x(), actualInImgPos.y(), (int)(ceil((float)_AnnotateArea_BBSelection_GlueDist / this->scaleFactor)));
+
+            if (selectedAnnot != -1)
+            {
+                // we're in edition mode - find which one : TL, T, TR, R..., L?
+
+                const cv::Rect2i& currBB = this->annotations->getRecord().getAnnotationById(selectedAnnot).BoundingBox;
+
+                int distToTop     = abs(currBB.tl().y -     actualInImgPos.y());
+                int distToLeft    = abs(currBB.tl().x -     actualInImgPos.x());
+                int distToBottom  = abs(currBB.br().y - 1 - actualInImgPos.y());
+                int distToRight   = abs(currBB.br().x - 1 - actualInImgPos.x());
+
+                // we must be under the selection area + in case both are under this area, we select the closer with some preference over the TL corner
+                bool topActive    = (distToTop   <=_AnnotateArea_BBSelection_GlueDist && distToTop<=distToBottom);
+                bool bottomActive = (distToBottom<=_AnnotateArea_BBSelection_GlueDist && distToTop >distToBottom);
+                bool leftActive   = (distToLeft  <=_AnnotateArea_BBSelection_GlueDist && distToLeft<=distToRight);
+                bool rightActive  = (distToRight <=_AnnotateArea_BBSelection_GlueDist && distToLeft >distToRight);
+
+                // simply fill the right position... it might have been possible to encode this kind of information but I'm a bit lazy there
+                if (topActive && leftActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_TopLeft;
+                    this->currentBBEditionStyle = _BBES_Corner;
+                    this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.br().y, 1, 1);
+                }
+                else if (topActive && !leftActive && !rightActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_Top;
+                    this->currentBBEditionStyle = _BBES_Vertical;
+                    this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.br().y, currBB.width+1, 1);
+                }
+                else if (topActive && rightActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_TopRight;
+                    this->currentBBEditionStyle = _BBES_Corner;
+                    this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.br().y, 1, 1);
+                }
+                else if (rightActive && !bottomActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_Right;
+                    this->currentBBEditionStyle = _BBES_Horizontal;
+                    this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, 1, currBB.height+1);
+                }
+                else if (rightActive && bottomActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_BottomRight;
+                    this->currentBBEditionStyle = _BBES_Corner;
+                    this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, 1, 1);
+                }
+                else if (bottomActive && !leftActive && !rightActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_Bottom;
+                    this->currentBBEditionStyle = _BBES_Vertical;
+                    this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, currBB.width+1, 1);
+                }
+                else if (bottomActive && leftActive)
+                {
+                    this->BBWhichCornerSelected = _BBEM_BottomLeft;
+                    this->currentBBEditionStyle = _BBES_Corner;
+                    this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.tl().y, 1, 1);
+                }
+                else
+                {
+                    this->BBWhichCornerSelected = _BBEM_Left;
+                    this->currentBBEditionStyle = _BBES_Horizontal;
+                    this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.tl().y, 1, currBB.height+1);
+                }
+
+                this->selectedObjectId = selectedAnnot;
+
+                this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
+            }
+            else
+            {
+                // generate a new object
+                this->selectedObjectId = this->annotations->addAnnotation( cv::Point2i(actualInImgPos.x(),   actualInImgPos.y()),
+                                                                           cv::Point2i(actualInImgPos.x()+1, actualInImgPos.y()+1), this->selectedClass );
+
+                // by default, work in BottomRight edition mode
+                this->BBWhichCornerSelected = _BBEM_BottomRight;
+
+                this->currentBBEditionStyle = _BBES_Corner;
+                this->currentBBEditionFixedRect = QRect(actualInImgPos, QSize(1,1));
+
+                QRect prevObjectROI = this->ObjectROI;
+                this->ObjectROI = QRect(event->pos(), event->pos());
+
+                this->update( (prevObjectROI | this->ObjectROI).adjusted(-2,-2,2,2) );
+            }
+        }
     }
 }
 
@@ -551,6 +655,46 @@ void AnnotateArea::mouseMoveEvent(QMouseEvent *event)
     // the mouse has moved, we record it and paint the content straight away
     if ((event->buttons() & Qt::LeftButton) && this->scribbling)
         this->drawLineTo(this->adaptToScaleDiv(event->pos()));
+    else if ((event->buttons() & Qt::LeftButton) && this->BBClassOnly)
+    {
+        // alright, we must edit the currently selected bounding box
+        /*
+        switch(this->BBWhichCornerSelected)
+        {
+        case _BBEM_TopLeft:
+            // update the boundary - be cautious about the cases when one of the coordinates makes us fall in a case when we're not editing the TL corner anymore
+
+            // TO BE CONTINUED
+        }
+        */
+        QPoint actualInImgPos = this->adaptToScaleDiv(event->pos());
+
+        QRect currPointRect;
+
+        switch(this->currentBBEditionStyle)
+        {
+        case _BBES_Corner:
+            currPointRect = QRect(actualInImgPos, QSize(1,1));
+            break;
+        case _BBES_Horizontal:
+            currPointRect = QRect(actualInImgPos.x(), this->currentBBEditionFixedRect.top(), 1, 1);
+            break;
+        case _BBES_Vertical:
+            currPointRect = QRect(this->currentBBEditionFixedRect.left(), actualInImgPos.y(), 1, 1);
+            break;
+        }
+
+        QRect newArea = this->currentBBEditionFixedRect | currPointRect;
+
+        this->annotations->editAnnotationBoundingBox( this->selectedObjectId, cv::Rect2i(cv::Point2i(newArea.left(), newArea.top()),
+                                                                                         cv::Point2i(newArea.right(), newArea.bottom())) );
+
+
+        QRect prevObjectROI = this->ObjectROI;
+        this->ObjectROI = this->adaptToScaleMul(newArea);
+
+        this->update( (prevObjectROI | this->ObjectROI).adjusted(-2,-2,2,2) );
+    }
 }
 
 
@@ -618,6 +762,15 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         // update the corresponding image content
         this->update( this->adaptToScaleMul(this->ObjectROI.adjusted(-2, -2, 2, 2)) );
     }
+    else if (event->button() == Qt::LeftButton && this->BBClassOnly)
+    {
+        // update the whole image, we may have messed-up with the objects numbering display
+        this->update();
+
+        // update the selection browser as well
+        this->selectAnnotation(this->selectedObjectId);
+    }
+    // there's nothing to do if we were in BB only update mode
 
     else if (event->button() == Qt::RightButton)
     {
@@ -625,7 +778,10 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         QPoint actualPos = this->adaptToScaleDiv(event->pos());
 
         // find the right annotation at the place where we clicked
-        this->selectedObjectId = this->annotations->getObjectIdAtPosition(actualPos.x(), actualPos.y());
+        if (this->BBClassOnly)
+            this->selectedObjectId = this->annotations->getClosestBBFromPosition( actualPos.x(), actualPos.y(), (int)(ceil((float)_AnnotateArea_BBSelection_GlueDist / this->scaleFactor)) );
+        else
+            this->selectedObjectId = this->annotations->getObjectIdAtPosition(actualPos.x(), actualPos.y());
 
         // update the display and emit the signal
         this->selectAnnotation(this->selectedObjectId);

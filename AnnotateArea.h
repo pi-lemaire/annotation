@@ -77,6 +77,13 @@
 
 enum cursorShape { AA_CS_round, AA_CS_square };
 
+enum BBCornerSelected { _BBEM_TopLeft, _BBEM_Top, _BBEM_TopRight, _BBEM_Right, _BBEM_BottomRight, _BBEM_Bottom, _BBEM_BottomLeft, _BBEM_Left };
+
+enum BBEditionStyle { _BBES_Corner, _BBES_Vertical, _BBES_Horizontal };
+
+
+const int _AnnotateArea_BBSelection_GlueDist = 5;
+
 
 const unsigned int _AA_CI_NoC = 0;      // no contours color index
 const unsigned int _AA_CI_NotSelC = 1;  // non-selected contour color index
@@ -165,7 +172,11 @@ private:
 
 
     // bool modified;
-    bool scribbling, rubberMode;
+    bool scribbling, rubberMode, BBClassOnly;
+    BBCornerSelected BBWhichCornerSelected;
+    BBEditionStyle currentBBEditionStyle;
+    QRect currentBBEditionFixedRect;
+
     int myPenWidth;
     QColor myPenColor;
     int selectedClass, selectedObjectId;

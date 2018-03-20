@@ -81,6 +81,8 @@ void AnnotationsConfig::setDefaultConfig()
     this->addProperty(prop);
     prop.className = "Utility"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
     this->addProperty(prop);
+    prop.className = "BB Only"; prop.classType = _ACT_BoundingBoxOnly; prop.displayRGBColor=Vec3b(85, 0, 255); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    this->addProperty(prop);
 
     this->imageFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png";
     this->summaryFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml";
@@ -808,6 +810,62 @@ int AnnotationsSet::getObjectIdAtPosition(int x, int y) const
 
 
 
+int AnnotationsSet::getClosestBBFromPosition(int x, int y, int searchingWindowRadius) const
+{
+    // find the closest Bounding Box from the Bounding Box Only objects
+
+    const vector<int>& listObjects = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
+    // look for the current frame objects
+
+    int minDist = searchingWindowRadius + 1;
+    int foundId = -1;
+
+    for (size_t k=0; k<listObjects.size(); k++)
+    {
+        if (this->config.getProperty(this->annotsRecord.getAnnotationById(listObjects[k]).ClassId).classType != _ACT_BoundingBoxOnly)
+            // we care only about BB only classes in this situation
+            continue;
+
+        // find the distance between the bounding box and the object
+        const Rect2i& currBB = this->annotsRecord.getAnnotationById(listObjects[k]).BoundingBox;
+
+        // min distance to a vertical and a horizontal line
+        int minDistH = (abs(currBB.tl().x-x) < abs(currBB.br().x-1-x)) ? abs(currBB.tl().x-x) : abs(currBB.br().x-1-x);
+        int minDistV = (abs(currBB.tl().y-y) < abs(currBB.br().y-1-y)) ? abs(currBB.tl().y-y) : abs(currBB.br().y-1-y);
+
+        // determining whether we're within the range of the object
+        bool withinHRange = (x > (currBB.tl().x-searchingWindowRadius)) && (x < (currBB.br().x+searchingWindowRadius));
+        bool withinVRange = (y > (currBB.tl().y-searchingWindowRadius)) && (y < (currBB.br().y+searchingWindowRadius));
+
+        if (    ((minDistH>searchingWindowRadius) && !withinHRange)
+             || ((minDistV>searchingWindowRadius) && !withinVRange) )
+            // one of the distances is greater than the searching window radius
+            // and we're well outside of the boundaries of the object - don't go further
+            continue;
+
+        // only keep the smallest amongst them
+        int minDistHandV = (minDistH < minDistV) ? minDistH : minDistV;
+
+        // found the closest possible object - update
+        if (minDistHandV < minDist)
+        {
+            foundId = listObjects[k];
+            minDist = minDistHandV;
+        }
+    }
+
+    return foundId;
+}
+
+
+
+
+
+
+
+
+
+
 
 cv::Mat& AnnotationsSet::accessCurrentAnnotationsClasses()
 {
@@ -1296,6 +1354,13 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
     for (size_t k=0; k<presentObjects.size(); k++)
     {
         AnnotationObject currentAnnotCaracs = this->annotsRecord.getAnnotationById(presentObjects[k]);
+
+
+        // don't bother with this part if the class is Bounding Boxes Only
+        if (this->config.getProperty(currentAnnotCaracs.ClassId).classType == _ACT_BoundingBoxOnly)
+            continue;
+
+
         // the way we store each possible occurrence uniquely is with the help of a Point2i
         Point2i objectRef(currentAnnotCaracs.ClassId, currentAnnotCaracs.ObjectId);
 
@@ -1429,7 +1494,7 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
                 // run through the index...
                 for (size_t k=0; k<colorsIndexSrc.size(); k++)
                 {
-                    // this is sub-optimal, but we will eventually do something better using
+                    // this is sub-optimal, but we will eventually do something better using idunnowhat
                     if (pointVals == colorsIndexSrc[k])
                     {
                         imgToStore.at<Vec3b>(i,j) = colorsIndexDst[k];
@@ -1482,6 +1547,15 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
     for (int i=0; i<this->config.getPropsNumber(); i++)
     {
         classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
+
+        if (this->config.getProperty(i+1).classType == _ACT_BoundingBoxOnly)
+        {
+            // give an impossible color so that it is not taken into account
+            minColorIndex.push_back(Vec3b(0,0,0));
+            maxColorIndex.push_back(Vec3b(0,0,0));
+            multipliersIndex.push_back(Vec3i(1,1,1));
+            continue;
+        }
 
         minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
 
@@ -1622,6 +1696,53 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
 
 
     return true;
+}
+
+
+
+
+
+
+
+
+
+void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB)
+{
+    this->annotsRecord.updateBoundingBox(recordId, newBB);
+
+    this->changesPerformedUponCurrentAnnot = true;
+}
+
+
+
+
+
+
+
+int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass)
+{
+    if (whichClass<1 || whichClass>this->config.getPropsNumber())
+        // wrong class number
+        return -1;
+
+    if (this->config.getProperty(whichClass).classType != _ACT_BoundingBoxOnly)
+        return -1;
+
+    // if this was called, this is necessarily a new annotation
+    int objectId = this->annotsRecord.getFirstAvailableObjectId(whichClass);
+
+    // store everything correctly
+    AnnotationObject newAnnot;
+    newAnnot.BoundingBox = cv::Rect2i(topLeftCorner, bottomRightCorner);  // we set +1 to the BR corner because this corner is not inclusive
+    newAnnot.ClassId = whichClass;
+    newAnnot.ObjectId = objectId;
+    newAnnot.FrameNumber = this->currentImgIndex;
+
+    this->changesPerformedUponCurrentAnnot = true;
+
+    // ...and finally, we return the object Id...
+    // in case this is only an update, the annotsRecord object should handle it properly
+    return this->annotsRecord.addNewAnnotation(newAnnot);
 }
 
 
@@ -1889,6 +2010,11 @@ void AnnotationsSet::removePixelsFromAnnotations(const cv::Mat& mask, const cv::
 
 
 
+
+
+
+
+
 void AnnotationsSet::mergeAnnotations(const std::vector<int>& annotationsList)
 {
     // determine which classes and which objects we are supposed to merge
@@ -2103,6 +2229,8 @@ void AnnotationsSet::deleteAnnotations(const std::vector<int>& annotationsList, 
 
 
 
+
+
 void AnnotationsSet::clearCurrentFrame()
 {
     // nullify everything
@@ -2117,6 +2245,8 @@ void AnnotationsSet::clearCurrentFrame()
     // don't forget to state that changes were performed!
     this->changesPerformedUponCurrentAnnot = true;
 }
+
+
 
 
 
@@ -2465,75 +2595,83 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
     // retrieve the frame number
     int frameNumber = this->annotsRecord.getAnnotationById(listObjects[0]).FrameNumber;
 
-    // prepare the image to be modified - we only need to modify the object ids mat
-    Mat imToModifyObjIds, imToModifyClasses;
-
-    string imgFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName), frameNumber);
 
 
-    // storing the bounding boxes so that we know which region within the image was affected
-    Rect2i contoursBB = this->annotsRecord.getAnnotationById(listObjects[0]).BoundingBox;
-
-
-
-    // is it in the buffer?
-    if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+    if (this->config.getProperty(newClassId).classType == _ACT_BoundingBoxOnly)
     {
-        this->annotationsClassesBuffer[frameNumber%this->bufferLength].copyTo(imToModifyClasses);
-        this->annotationsIdsBuffer[frameNumber%this->bufferLength].copyTo(imToModifyObjIds);
-    }
-    else
-    {
-        // load the images if available
-        this->loadAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
-    }
+        // if it's bounding boxes only, we won't ever need to modify some images
+
+        // prepare the image to be modified - we only need to modify the object ids mat
+        Mat imToModifyObjIds, imToModifyClasses;
+
+        string imgFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, (this->isVideoOpen() ? this->videoFileName : this->imageFileName), frameNumber);
+
+
+        // storing the bounding boxes so that we know which region within the image was affected
+        Rect2i contoursBB = this->annotsRecord.getAnnotationById(listObjects[0]).BoundingBox;
 
 
 
-    // alright, proceed
-    if (imToModifyClasses.data && imToModifyObjIds.data)
-    {
-        // we can proceed to modifying the images
-        for (size_t k=0; k<listObjects.size(); k++)
+        // is it in the buffer?
+        if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
         {
-            // storing the references of the object that we wish to modify
-            const AnnotationObject& annObj = this->annotsRecord.getAnnotationById(listObjects[k]);
+            this->annotationsClassesBuffer[frameNumber%this->bufferLength].copyTo(imToModifyClasses);
+            this->annotationsIdsBuffer[frameNumber%this->bufferLength].copyTo(imToModifyObjIds);
+        }
+        else
+        {
+            // load the images if available
+            this->loadAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+        }
 
-            // updating the contours BB so that it contains every object within the concerned area
-            contoursBB |= annObj.BoundingBox;
 
-            // avoiding to do some unnecessary thing..
-            if (annObj.ClassId==newClassId && annObj.ObjectId==newObjectId)
-                continue;
 
-            // running through the image (only the bounding box, actually) to modify the pixels
-            for (int i=annObj.BoundingBox.tl().y; i<annObj.BoundingBox.br().y; i++)
+        // alright, proceed
+        if (imToModifyClasses.data && imToModifyObjIds.data)
+        {
+            // we can proceed to modifying the images
+            for (size_t k=0; k<listObjects.size(); k++)
             {
-                for (int j=annObj.BoundingBox.tl().x; j<annObj.BoundingBox.br().x; j++)
+                // storing the references of the object that we wish to modify
+                const AnnotationObject& annObj = this->annotsRecord.getAnnotationById(listObjects[k]);
+
+                // updating the contours BB so that it contains every object within the concerned area
+                contoursBB |= annObj.BoundingBox;
+
+                // avoiding to do some unnecessary thing..
+                if (annObj.ClassId==newClassId && annObj.ObjectId==newObjectId)
+                    continue;
+
+                // running through the image (only the bounding box, actually) to modify the pixels
+                for (int i=annObj.BoundingBox.tl().y; i<annObj.BoundingBox.br().y; i++)
                 {
-                    if (imToModifyClasses.at<int16_t>(i,j)==annObj.ClassId && imToModifyObjIds.at<int32_t>(i,j)==annObj.ObjectId)
+                    for (int j=annObj.BoundingBox.tl().x; j<annObj.BoundingBox.br().x; j++)
                     {
-                        imToModifyClasses.at<int16_t>(i,j) = newClassId;
-                        imToModifyObjIds.at<int32_t>(i,j) = newObjectId;
+                        if (imToModifyClasses.at<int16_t>(i,j)==annObj.ClassId && imToModifyObjIds.at<int32_t>(i,j)==annObj.ObjectId)
+                        {
+                            imToModifyClasses.at<int16_t>(i,j) = newClassId;
+                            imToModifyObjIds.at<int32_t>(i,j) = newObjectId;
+                        }
                     }
                 }
             }
-        }
 
-        // storing the "upgraded" version of this image
-        this->saveAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
+            // storing the "upgraded" version of this image
+            this->saveAnnotationsImageFile(imgFileName, imToModifyClasses, imToModifyObjIds);
 
-        // copy back the data to the buffer in case it was already buffered
-        if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
-        {
-            imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
-            imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
+            // copy back the data to the buffer in case it was already buffered
+            if (frameNumber>(this->maxImgReached-this->bufferLength) && frameNumber<=this->maxImgReached)
+            {
+                imToModifyClasses.copyTo(this->annotationsClassesBuffer[frameNumber%this->bufferLength]);
+                imToModifyObjIds.copyTo(this->annotationsIdsBuffer[frameNumber%this->bufferLength]);
 
-            // this is where the contoursBB thing appears
-            contoursBB = Rect2i(contoursBB.tl().x-1, contoursBB.tl().y-1, contoursBB.size().width+2, contoursBB.size().height+2);
-            this->computeFrameContours(frameNumber, contoursBB);
+                // this is where the contoursBB thing appears
+                contoursBB = Rect2i(contoursBB.tl().x-1, contoursBB.tl().y-1, contoursBB.size().width+2, contoursBB.size().height+2);
+                this->computeFrameContours(frameNumber, contoursBB);
+            }
         }
     }
+
 
     // finally, we simply call the merge procedure from the record
     // beware for one exception : sometimes we call this function within an object deletion
@@ -2543,8 +2681,11 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
 
 
     // don't forget to state that changes were performed!
-    this->changesPerformedUponCurrentAnnot = true;
+    if (frameNumber == this->currentImgIndex)
+        this->changesPerformedUponCurrentAnnot = true;
 }
+
+
 
 
 
@@ -2671,6 +2812,15 @@ void AnnotationsSet::loadAnnotationsImageFile(const std::string& fileName, cv::M
     {
         classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
 
+        if (this->config.getProperty(i+1).classType == _ACT_BoundingBoxOnly)
+        {
+            // give an impossible color so that it is not taken into account
+            minColorIndex.push_back(Vec3b(0,0,0));
+            maxColorIndex.push_back(Vec3b(0,0,0));
+            multipliersIndex.push_back(Vec3i(1,1,1));
+            continue;
+        }
+
         minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
 
         // warning : there's an exception when the class is uniform
@@ -2754,6 +2904,15 @@ void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const
     for (int i=0; i<this->config.getPropsNumber(); i++)
     {
         classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
+
+        if (this->config.getProperty(i+1).classType == _ACT_BoundingBoxOnly)
+        {
+            // give an impossible color so that it is not taken into account
+            minColorIndex.push_back(Vec3b(0,0,0));
+            maxColorIndex.push_back(Vec3b(0,0,0));
+            dividersIndex.push_back(Vec3i(1,1,1));
+            continue;
+        }
 
         minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
 
@@ -2887,48 +3046,6 @@ void AnnotationsSet::handleAnnotationsModifications(const vector<Point2i>& affec
         else
             // simply update the value with the new ones acquired
             this->annotsRecord.updateBoundingBox( recordId, Rect2i(Point2i(LCoord, TCoord), Point2i(RCoord+1,BCoord+1)) );
-
-
-        /*
-        // commonBB is the area of the object that was modified. We know that the object cannot have been modified outside of this area
-        Rect2i commonBB = annotOrigBB & affectedObjectsBBs[k];
-
-        // those variables will store the new object coords
-        int TCoord, LCoord, RCoord, BCoord;
-
-
-        // evaluating the LCoord
-        if (commonBB.tl().x > annotOrigBB.tl().x)
-            // the modification cannot have affected the TL.x value
-            LCoord = annotOrigBB.tl().x;
-        else
-            // the modification can have affected the TL.x value, we need to check everything - we save this information for later
-            LCoord = commonBB.br().x-1;
-
-        // evaluating the TCoord
-        if (commonBB.tl().y > annotOrigBB.tl().y)
-            // the modification cannot have affected the TL.y value
-            TCoord = annotOrigBB.tl().y;
-        else
-            // the modification can have affected the TL.y value, we need to check the whole area - we save this information for later
-            TCoord = commonBB.br().y-1;
-
-        // evaluating the RCoord
-        if (commonBB.br().x < annotOrigBB.br().x)
-            // the modification cannot have affected the BR.x value
-            RCoord = annotOrigBB.br().x-1;
-        else
-            // the modification can have affected the BR.x value, we need to check everything - we save this information for later
-            RCoord = commonBB.tl().x;
-
-        // evaluating the BCoord
-        if (commonBB.br().y < annotOrigBB.br().y)
-            // the modification cannot have affected the BR.y value
-            BCoord = annotOrigBB.br().y-1;
-        else
-            // the modification can have affected the BR.y value, we need to check the whole area - we save this information for later
-            BCoord = commonBB.tl().y;
-            */
 
     }
 

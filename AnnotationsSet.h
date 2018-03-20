@@ -71,7 +71,7 @@ namespace AnnotationUtilities
 
 
 
-enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects };
+enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects, _ACT_BoundingBoxOnly };
 
 
 
@@ -380,6 +380,9 @@ public:
 
     // get the object Id (within the record) to which the pixel (x,y) belongs in the current image
     int getObjectIdAtPosition(int x, int y) const;
+    int getClosestBBFromPosition(int x, int y, int searchingWindowRadius) const;
+
+
 
     const std::vector<int>& getObjectsListOnCurrentFrame() const { return this->annotsRecord.getFrameContentIds(this->currentImgIndex); }
 
@@ -439,6 +442,15 @@ public:
 
 
 
+    void editAnnotationBoundingBox(int recordId, const cv::Rect2i& newBB);
+
+
+    int addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass);
+            // add an annotation.
+            // mask is in CV_8UC1 format, whatever is not zero belongs to the object.
+            // annotStartingPoint is there to know whether we add this to a previous annotation (in which case we merge both), or whether we start a new one
+            // the return index is the index of the ID, which is set automatically by this class
+            // note that the merging thing only occurs when the starting point corresponds to an annotation of the same type
 
     int addAnnotation(const cv::Mat& mask, const cv::Point2i& topLeftCorner, int whichClass, const cv::Point2i& annotStartingPoint=cv::Point2i(-1,-1), int forceObjectId=-1);
             // add an annotation.
