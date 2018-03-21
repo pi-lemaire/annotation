@@ -182,62 +182,81 @@ void OptFlowTracking::trackAnnotations()
         else
         {
             // version 2 of the algorithm
-            vector<Point2f> originPoints, destPoints;
 
-            Mat origAnnotMask;
-            newAnnotationMask.copyTo(origAnnotMask);
 
-            // now looking at the points in the previous annotation
-            const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
-            const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
-
+            // what we will actually do will depend greatly on whether we're in the case of a BB only class or not
             bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
 
-            for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
-            {
-                for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
-                {
-                    if ( BBClassOnly || ((prevClassMat.at<int16_t>(i,j)==prevAnnot.ClassId) && (prevObjIdMat.at<int32_t>(i,j)==prevAnnot.ObjectId)) )
-                    {
-                        // found an element of this annotation, store its position in both the newAnnotationMask matrix and the
-                        origAnnotMask.at<uchar>(i-newBB.tl().y, j-newBB.tl().x) = 255;
-
-                        originPoints.push_back( Point2f( j-newBB.tl().x,
-                                                         i-newBB.tl().y ) );    // position in the "newAnnotationMask" matrix
-
-                        destPoints.push_back( Point2f( j - newBB.tl().x + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0],
-                                                       i - newBB.tl().y + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1] ) );
-                                                                                // theoretical position in the tracked "newAnnotationMask" matrix
-                    }
-                }
-            }
-
-            // calculate the affine transform
-            Mat transform;
-            this->findAffineTransformParams(originPoints, destPoints, transform);
 
             if (!BBClassOnly)
             {
+                // case pixel level : find the displacement of every pixel, find the affine transform indicated by the optical flow vector
+                vector<Point2f> originPoints, destPoints;
+
+                Mat origAnnotMask;
+                newAnnotationMask.copyTo(origAnnotMask);
+
+                // now looking at the points in the previous annotation
+                const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
+                const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
+
+                for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
+                {
+                    for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
+                    {
+                        if ((prevClassMat.at<int16_t>(i,j)==prevAnnot.ClassId) && (prevObjIdMat.at<int32_t>(i,j)==prevAnnot.ObjectId))
+                        {
+                            // found an element of this annotation, store its position in both the newAnnotationMask matrix and the
+                            origAnnotMask.at<uchar>(i-newBB.tl().y, j-newBB.tl().x) = 255;
+
+                            originPoints.push_back( Point2f( j-newBB.tl().x,
+                                                             i-newBB.tl().y ) );    // position in the "newAnnotationMask" matrix
+
+                            destPoints.push_back( Point2f( j - newBB.tl().x + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0],
+                                                           i - newBB.tl().y + flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1] ) );
+                                                                                    // theoretical position in the tracked "newAnnotationMask" matrix
+                        }
+                    }
+                }
+
+
+                // calculate the affine transform
+                Mat transform;
+                this->findAffineTransformParams(originPoints, destPoints, transform);
+
+                // apply it to the object mask
                 warpAffine(origAnnotMask, newAnnotationMask, transform, origAnnotMask.size());
 
+                // threshold it so that we stay in pixel level domain
                 threshold(newAnnotationMask, newAnnotationMask, 127, 255, CV_THRESH_BINARY);
             }
             else
             {
-                // performing the transform over the 4 corners of the bounding box
-                std::vector<Point2f> origRecCoords, transformedRecCoords;
-                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.tl().x, prevAnnot.BoundingBox.tl().y));
-                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.tl().x, prevAnnot.BoundingBox.br().y));
-                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.br().x, prevAnnot.BoundingBox.br().y));
-                origRecCoords.push_back(Point2f(prevAnnot.BoundingBox.br().x, prevAnnot.BoundingBox.tl().y));
+                // we will only translate the bounding box according to the median of the observed flow vector
+                // (before we find something more accurate, like perhaps weighting the sum with a gaussian to take the center of the area into account?)
 
-                cv::transform(origRecCoords, transformedRecCoords, transform);
+                std::vector<float> displacementX, displacementY;
 
-                BBTracked = Rect2i(Point2i(transformedRecCoords[0].x, transformedRecCoords[0].y), Size2i(1,1));
-                for (size_t k=1; k<4; k++)
+                const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
+                const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
+
+                for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
                 {
-                    BBTracked |= Rect2i(Point2i(transformedRecCoords[k].x, transformedRecCoords[k].y), Size2i(1,1));
+                    for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
+                    {
+                        displacementX.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0]);
+                        displacementY.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1]);
+                    }
                 }
+
+                sort(displacementX.begin(), displacementX.end());
+                sort(displacementY.begin(), displacementY.end());
+                int actualDisplacementX = round(displacementX[(int)displacementX.size()/2]);
+                int actualDisplacementY = round(displacementY[(int)displacementY.size()/2]);
+
+                BBTracked = prevAnnot.BoundingBox;
+                BBTracked.x += actualDisplacementX;
+                BBTracked.y += actualDisplacementY;
             }
 
         }
