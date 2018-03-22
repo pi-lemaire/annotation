@@ -20,6 +20,36 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     this->buttonLockAnnotations =        new QPushButton(tr("&Lock", "Annotation Browser"));
     this->buttonUnlockAnnotations =      new QPushButton(tr("&Unlock", "Annotation Browser"));
 
+    this->filterFramesNeighborhoodCheckBox = new QCheckBox(tr("Frames NeighborHood"), this);
+    this->filterFramesNeighborhoodCheckBox->setChecked(true);   // by default, check it - it's the most convenient filter, it should be always on
+    this->filterObjectAreaCheckBox = new QCheckBox(tr("Object NeighborHood"), this);
+    this->filterClassCheckBox  = new QCheckBox(tr("Selected class only"), this);
+    this->filterObjectCheckBox = new QCheckBox(tr("Selected object only"), this);
+
+    QValidator *frFilterValidator = new QIntValidator(0, 100, this);
+    this->filterFramesNeighborhoodLineEdit = new QLineEdit(this);
+    this->filterFramesNeighborhoodLineEdit->setText(QString::number(5));
+    this->filterFramesNeighborhoodLineEdit->setValidator(frFilterValidator);
+
+    QValidator *obFilterValidator = new QIntValidator(0, 1000, this);
+    this->filterObjectAreaLineEdit = new QLineEdit(this);
+    this->filterObjectAreaLineEdit->setText(QString::number(150));
+    this->filterObjectAreaLineEdit->setValidator(obFilterValidator);
+
+    this->filtersLayout = new QGridLayout;
+    this->filtersLayout->addWidget(this->filterFramesNeighborhoodCheckBox, 0, 0, 1, 1);
+    this->filtersLayout->addWidget(this->filterFramesNeighborhoodLineEdit, 0, 1, 1, 1);
+    this->filtersLayout->addWidget(this->filterObjectAreaCheckBox, 1, 0, 1, 1);
+    this->filtersLayout->addWidget(this->filterObjectAreaLineEdit, 1, 1, 1, 1);
+    this->filtersLayout->addWidget(this->filterClassCheckBox, 2, 0, 1, 2);
+    this->filtersLayout->addWidget(this->filterObjectCheckBox, 3, 0, 1, 2);
+
+    this->filtersGroupBox = new QGroupBox(tr("Filters"), this);
+    this->filtersGroupBox->setLayout(this->filtersLayout);
+
+    // QLineEdit *filterFramesNeighborhoodLineEdit, *filterObjectNeighborhoodLineEdit;
+
+
     // then the layout
     this->browserLayout = new QGridLayout;
     this->browserLayout->addWidget(this->browser, 0, 0, 1, 2);
@@ -29,6 +59,7 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     this->browserLayout->addWidget(this->buttonSeparateAnnotations, 2, 1, 1, 1);
     this->browserLayout->addWidget(this->buttonLockAnnotations, 3, 0, 1, 1);
     this->browserLayout->addWidget(this->buttonUnlockAnnotations, 3, 1, 1, 1);
+    this->browserLayout->addWidget(this->filtersGroupBox, 4, 0, 1, 2);
 
     // set the layout as the main thing
     this->setLayout(this->browserLayout);
@@ -41,8 +72,17 @@ AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* paren
     QObject::connect(this->buttonLockAnnotations,        SIGNAL(clicked()), this, SLOT(LockAnnotationsClicked()));
     QObject::connect(this->buttonUnlockAnnotations,      SIGNAL(clicked()), this, SLOT(UnlockAnnotationsClicked()));
 
+    // filters connections
+    QObject::connect(this->filterFramesNeighborhoodCheckBox, SIGNAL(stateChanged(int)), this, SLOT(filtersModified()));
+    QObject::connect(this->filterObjectAreaCheckBox,         SIGNAL(stateChanged(int)), this, SLOT(filtersModified()));
+    QObject::connect(this->filterClassCheckBox,              SIGNAL(stateChanged(int)), this, SLOT(filtersModified()));
+    QObject::connect(this->filterObjectCheckBox,             SIGNAL(stateChanged(int)), this, SLOT(filtersModified()));
+    QObject::connect(this->filterFramesNeighborhoodLineEdit, SIGNAL(textChanged(QString)), this, SLOT(filtersModified()));
+    QObject::connect(this->filterObjectAreaLineEdit,         SIGNAL(textChanged(QString)), this, SLOT(filtersModified()));
+
     // connect the browser
     QObject::connect(this->browser, SIGNAL(anchorClicked(QUrl)), this, SLOT(BrowserLinkClicked(QUrl)));
+
 
     this->updateBrowser(-1);
     this->currentClassSelected = 1; // default class selected
@@ -55,9 +95,20 @@ AnnotationsBrowser::~AnnotationsBrowser()
 }
 
 
+void AnnotationsBrowser::filtersModified()
+{
+    this->updateBrowser(this->currentAnnotSelected);
+}
+
+
+
 void AnnotationsBrowser::setClassSelected(int whichClass)
 {
     this->currentClassSelected = whichClass;
+
+    if (this->filterClassCheckBox->checkState()==Qt::Checked)
+        this->updateBrowser(this->currentAnnotSelected);
+
     this->setButtonsActivation();
 }
 
@@ -224,19 +275,66 @@ void AnnotationsBrowser::updateBrowser(int selected)
     QString htmlCode;
     htmlCode += "<table width=100%>";
 
-    // frames loop
-    for (int iFrame=0; iFrame<this->annots->getRecord().getRecordedFramesNumber(); iFrame++)
+
+    int iFrameStartPoint = 0;
+    int iFrameEndPoint = this->annots->getRecord().getRecordedFramesNumber();
+
+    if (this->filterFramesNeighborhoodCheckBox->checkState() == Qt::Checked)
+    {
+        // frames loop
+        iFrameStartPoint = QtCvUtils::getMax(this->annots->getCurrentFramePosition()-this->filterFramesNeighborhoodLineEdit->text().toInt(), 0);
+        iFrameEndPoint = QtCvUtils::getMin(this->annots->getCurrentFramePosition()+this->filterFramesNeighborhoodLineEdit->text().toInt()+1, this->annots->getRecord().getRecordedFramesNumber());
+    }
+
+
+    QRect filteredArea;
+    if ((this->currentAnnotSelected==-1) || (this->filterObjectAreaCheckBox->checkState()==Qt::Unchecked))
+    {
+        filteredArea = QtCvUtils::cvRect2iToQRect(cv::Rect2i(cv::Point2i(0,0), this->annots->getCurrentOriginalImg().size()));
+    }
+    else
+    {
+        int pxNumber = this->filterObjectAreaLineEdit->text().toInt();
+        filteredArea = QtCvUtils::cvRect2iToQRect(this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).BoundingBox);
+        filteredArea = filteredArea.adjusted( -pxNumber, -pxNumber, pxNumber, pxNumber );
+    }
+
+
+    for (int iFrame=iFrameStartPoint; iFrame<iFrameEndPoint; iFrame++)
     {
         // objects loop
         for (int jAnnotId=0; jAnnotId<(int)this->annots->getRecord().getFrameContentIds(iFrame).size(); jAnnotId++)
         {
+            QString sourceTag = "";
+
+            // even if the element is not inside the selection, keep the source tag so that the display isn't too annoying
+            if (cv::Point2i(iFrame, jAnnotId) == bestSourcePosition)
+                sourceTag += "<a name='source'></a>";
+
+
             int currAnnotId = this->annots->getRecord().getFrameContentIds(iFrame)[jAnnotId];
 
-            AnnotationObject currObj = this->annots->getRecord().getAnnotationById(currAnnotId);
+            // store the object informations
+            const AnnotationObject& currObj = this->annots->getRecord().getAnnotationById(currAnnotId);
+
+            // filter out the class when required
+            if (this->filterClassCheckBox->checkState() == Qt::Checked && currObj.ClassId != this->currentClassSelected)
+                continue;
+
+            // filter out the object id
+            if ((this->filterObjectCheckBox->checkState() == Qt::Checked) && (this->currentAnnotSelected!=-1)
+                    && ( (currObj.ClassId!=this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ClassId)
+                       ||(currObj.ObjectId!=this->annots->getRecord().getAnnotationById(this->currentAnnotSelected).ObjectId) ))
+                continue;
+
+            // reject an object contained into an irrelevant area
+            if ((this->filterObjectCheckBox->checkState() == Qt::Checked) && (!QtCvUtils::cvRect2iToQRect(currObj.BoundingBox).intersects(filteredArea)))
+                continue;
+
 
             QString boldTagOpen = "";
             QString boldTagClosed = "";
-            QString sourceTag = "";
+            //QString sourceTag = "";
             QString checkedCharacter = "[_]";
             QString lockedCharacter = (currObj.locked ? "-L-" : "-u-");
 
@@ -249,8 +347,7 @@ void AnnotationsBrowser::updateBrowser(int selected)
                 }
             }
 
-            if (cv::Point2i(iFrame, jAnnotId) == bestSourcePosition)
-                sourceTag = "<a name='source'></a>";
+
 
             if (currAnnotId == selected)
             {

@@ -129,6 +129,9 @@ void OptFlowTracking::trackAnnotations()
     {
         const AnnotationObject& prevAnnot = this->originAnnots->getRecord().getAnnotationById(origAnnotsIds[k]);
 
+        if (prevAnnot.BoundingBox.size() == Size2i(0,0))
+            continue;
+
         Rect2i newBB( Point2i(prevAnnot.BoundingBox.tl().x-increaseSize, prevAnnot.BoundingBox.tl().y-increaseSize),
                       Size2i(prevAnnot.BoundingBox.size().width + (2*increaseSize), prevAnnot.BoundingBox.size().height + (2*increaseSize)) );
 
@@ -237,8 +240,10 @@ void OptFlowTracking::trackAnnotations()
 
                 std::vector<float> displacementX, displacementY;
 
+                /*
                 const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
                 const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
+                */
 
                 for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
                 {

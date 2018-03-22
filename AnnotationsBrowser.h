@@ -6,6 +6,10 @@
 #include <QTextBrowser>
 #include <QPushButton>
 #include <QGridLayout>
+#include <QCheckBox>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QIntValidator>
 #include <QUrl>
 
 
@@ -46,6 +50,7 @@ private slots:
     void BrowserLinkClicked(const QUrl&);
     void LockAnnotationsClicked();
     void UnlockAnnotationsClicked();
+    void filtersModified();
 
 
 signals:
@@ -61,6 +66,12 @@ private:
     QPushButton *buttonGroupAnnotations, *buttonSeparateAnnotations, *buttonDeleteAnnotations, *buttonSwitchAnnotationsClass, *buttonLockAnnotations, *buttonUnlockAnnotations;
     QGridLayout *browserLayout;
     QTextBrowser *browser;
+
+    // filters section
+    QCheckBox *filterFramesNeighborhoodCheckBox, *filterClassCheckBox, *filterObjectAreaCheckBox, *filterObjectCheckBox;
+    QGroupBox *filtersGroupBox;
+    QGridLayout *filtersLayout;
+    QLineEdit *filterFramesNeighborhoodLineEdit, *filterObjectAreaLineEdit;
 
     AnnotationsSet *annots;
 

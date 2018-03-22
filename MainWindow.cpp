@@ -98,10 +98,10 @@ MainWindow::MainWindow()
 
     // generate the browser, provide the right pointer
     this->annotsBrowser = new AnnotationsBrowser(this->annotations, this, Qt::Tool);
-    this->annotsBrowser->resize(350, 450);
+    this->annotsBrowser->resize(350, 550);
     this->annotsBrowser->show();
     this->annotsBrowser->setWindowTitle(tr("Objects Selection"));
-    this->annotsBrowser->move(100, 400);
+    this->annotsBrowser->move(100, 300);
 
 
     // create the menu actions etc
