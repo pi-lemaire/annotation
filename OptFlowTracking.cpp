@@ -49,6 +49,7 @@ void OptFlowTracking::setDefaultConfig()
     this->iterations = 3;
     this->polyN = 5;
     this->polySigma = 1.2;
+    this->interpolateLength = 5;
     this->gaussianWindow = true;
 
     this->initParamsHandler();
@@ -67,6 +68,7 @@ void OptFlowTracking::initParamsHandler()
     this->pushParam<int>("Polynomial Window", &(this->polyN), "Size of the pixel neighborhood to find polynomial expansion");
     this->pushParam<double>("Polynomial Sigma", &(this->polySigma), "Standard Deviation of the gaussian used in the polynomial expansion");
     this->pushParam<bool>("Gaussian Window", &(this->gaussianWindow), "Use a gaussian instead of a box for the search");
+    this->pushParam<int>("Interpolation window", &(this->interpolateLength), "Number of successive frames to analyze then to interpolate (when in bounding boxes only mode)only on BB only objects)");
 }
 
 

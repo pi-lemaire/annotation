@@ -1716,6 +1716,60 @@ void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB
 
 
 
+void AnnotationsSet::interpolateLastBoundingBoxes(int interpolateRecordLength)
+{
+    int startingFrame = this->currentImgIndex-interpolateRecordLength;  // this is the frame on which we start the interpolation
+    if (startingFrame<0) startingFrame = 0; // some safety net
+
+    int actualInterpLength = this->currentImgIndex - startingFrame;
+    if (actualInterpLength<2)   // doesn't make any sense to continue, we won't have anything to interpolate
+        return;
+
+    //const vector<int>& startingFrameObjects = this->annotsRecord.getFrameContentIds(startingFrame);
+    //const vector<int>& endingFrameObjects = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
+
+    // now going through the middle frames
+    for (int i=startingFrame+1; i<this->currentImgIndex; i++)
+    {
+        float interpFactorEnd = (float)(i-startingFrame) / (float)actualInterpLength;
+        float interpFactorStart = 1. - interpFactorEnd;
+
+        // now looking at all the BB Only objects within the frame
+        const vector<int>& currFrameObjs = this->annotsRecord.getFrameContentIds(i);
+
+        for (size_t k=0; k<currFrameObjs.size(); k++)
+        {
+            // storing the current object properties
+            const AnnotationObject& objCharacs = this->annotsRecord.getAnnotationById(currFrameObjs[k]);
+
+            // we care only about the bounding box only objects
+            if (this->config.getProperty(objCharacs.ClassId).classType != _ACT_BoundingBoxOnly)
+                continue;
+
+            // verify if this particular object has both a counterpart on the starting frame and the ending frame
+            int startingObjId = this->annotsRecord.searchAnnotation(startingFrame, objCharacs.ClassId, objCharacs.ObjectId);
+            int endingObjId = this->annotsRecord.searchAnnotation(this->currentImgIndex, objCharacs.ClassId, objCharacs.ObjectId);
+
+            // if not, discard
+            if (startingObjId==-1 || endingObjId==-1)
+                continue;
+
+            // storing the starting and ending BBs
+            const Rect2i& startingBB = this->annotsRecord.getAnnotationById(startingObjId).BoundingBox;
+            const Rect2i& endingBB = this->annotsRecord.getAnnotationById(endingObjId).BoundingBox;
+
+            // perform the actual interpolation
+            Rect2i newBB = Rect2i( Point2i( round( (float)startingBB.tl().x * interpFactorStart + (float)endingBB.tl().x * interpFactorEnd),
+                                            round( (float)startingBB.tl().y * interpFactorStart + (float)endingBB.tl().y * interpFactorEnd) ),
+                                   Point2i( round( (float)startingBB.br().x * interpFactorStart + (float)endingBB.br().x * interpFactorEnd),
+                                            round( (float)startingBB.br().y * interpFactorStart + (float)endingBB.br().y * interpFactorEnd) ) );
+
+            // store the modification
+            this->annotsRecord.updateBoundingBox(currFrameObjs[k], newBB);
+        }
+    }
+}
+
 
 
 
@@ -1735,9 +1789,16 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
     AnnotationObject newAnnot;
     newAnnot.BoundingBox = cv::Rect2i(topLeftCorner, bottomRightCorner);  // we set +1 to the BR corner because this corner is not inclusive
     newAnnot.BoundingBox &= cv::Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()); // ensuring that the new annotation is well inside the boundaries of the image
+
+    if (newAnnot.BoundingBox.width==0 || newAnnot.BoundingBox.height==0)
+        // it doesn't make sense to record an empty object - we skip it
+        return -1;
+
     newAnnot.ClassId = whichClass;
     newAnnot.ObjectId = objectId;
     newAnnot.FrameNumber = this->currentImgIndex;
+
+
 
     this->changesPerformedUponCurrentAnnot = true;
 

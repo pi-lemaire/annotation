@@ -73,6 +73,8 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnn
 
     this->OFTracking = OFTrack;
 
+    this->framesComputedForInterpolation = 0;
+
     // ensuring that the widget is always referenced to the top left corner
     setAttribute(Qt::WA_StaticContents);
 
@@ -508,6 +510,49 @@ void AnnotateArea::OFTrackToNextFrame()
     }
 }
 
+
+
+void AnnotateArea::OFTrackMultipleFrames()
+{
+    // this is almost the same as displayNextFrame
+    AnnotationObject previouslySelectedObj = this->annotations->getRecord().getAnnotationById(this->selectedObjectId);
+
+    this->framesComputedForInterpolation = 0;
+
+    while (this->framesComputedForInterpolation<this->OFTracking->getInterpolateLength())
+    {
+        if (!this->annotations->loadNextFrame())
+            break;
+
+        this->OFTracking->trackAnnotations();
+
+        this->framesComputedForInterpolation++;
+    }
+
+    this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
+                                                                              previouslySelectedObj.ClassId,
+                                                                              previouslySelectedObj.ObjectId );
+    // if no object corresponds, it will be -1 - exactly what we need
+
+    this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
+
+    this->updatePaintImages();
+
+    this->selectAnnotation(this->selectedObjectId);
+
+    // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
+
+    update();
+}
+
+
+void AnnotateArea::interpolateBBObjects()
+{
+    if (this->framesComputedForInterpolation>1)
+        this->annotations->interpolateLastBoundingBoxes(this->framesComputedForInterpolation);
+
+    this->framesComputedForInterpolation = 0;
+}
 
 
 

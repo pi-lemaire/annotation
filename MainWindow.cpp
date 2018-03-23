@@ -255,6 +255,18 @@ void MainWindow::loadAnnotations()
     }
 }
 
+
+void MainWindow::jumpToLast()
+{
+    if (this->annotations->isImageOpen() || this->annotations->isVideoOpen())
+    {
+        int maxFrame = this->annotations->getRecord().getRecordedFramesNumber() - 1;
+        this->annotateArea->displayFrame(maxFrame);
+    }
+}
+
+
+
 void MainWindow::saveAnnotationsAs()
 {
     QString fileName = QFileDialog::getSaveFileName(this,
@@ -534,6 +546,8 @@ void MainWindow::createActions()
     connect(this->nextFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(displayNextFrame()));
     this->prevFrameAct = new QAction(tr("&Previous frame"), this);
     connect(this->prevFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(displayPrevFrame()));
+    this->jumpToLastAnnotatedFrameAct = new QAction(tr("&Jump to Last annotated Frame"), this);
+    connect(this->jumpToLastAnnotatedFrameAct, SIGNAL(triggered()), this, SLOT(jumpToLast()));
 
 
 
@@ -579,8 +593,14 @@ void MainWindow::createActions()
     connect(this->uncheckSelectedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckSelected()));
     this->uncheckAllAct = new QAction(tr("Uncheck All annotations"), this);
     connect(this->uncheckAllAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(uncheckAll()));
-
-
+    this->deleteCheckedAct = new QAction(tr("Delete the Checked Annotation(s)"), this);
+    connect(this->deleteCheckedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(DeleteAnnotationsClicked()));
+    this->groupCheckedAct = new QAction(tr("Group the Checked Annotations"), this);
+    connect(this->groupCheckedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(GroupAnnotationsClicked()));
+    this->lockCheckedAct = new QAction(tr("Lock the checked annotation(s)"), this);
+    connect(this->lockCheckedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(LockAnnotationsClicked()));
+    this->unlockCheckedAct = new QAction(tr("Unlock the checked annotation(s)"), this);
+    connect(this->unlockCheckedAct, SIGNAL(triggered()), this->annotsBrowser, SLOT(UnlockAnnotationsClicked()));
 
 
     this->configureSuperPixelsAct = new QAction(tr("SuperPixels Settings"), this);
@@ -595,6 +615,10 @@ void MainWindow::createActions()
     connect(this->configureOFTrackingAct, SIGNAL(triggered()), this, SLOT(configureOFTracking()));
     this->OFTrackToNextFrameAct = new QAction(tr("Track to next frame using Optical Flow"), this);
     connect(this->OFTrackToNextFrameAct, SIGNAL(triggered()), this->annotateArea, SLOT(OFTrackToNextFrame()));
+    this->OFTrackMultipleFramesAct = new QAction(tr("Track Multiples frames using Optical flow"), this);
+    connect(this->OFTrackMultipleFramesAct, SIGNAL(triggered()), this->annotateArea, SLOT(OFTrackMultipleFrames()));
+    this->interpolateLastBBsAct = new QAction(tr("Interpolate the last frames on Bounding Boxes"), this);
+    connect(this->interpolateLastBBsAct, SIGNAL(triggered()), this->annotateArea, SLOT(interpolateBBObjects()));
 
 
 
@@ -612,11 +636,17 @@ void MainWindow::createActions()
     this->checkSelectedAct->setShortcut(Qt::Key_C);
     this->uncheckSelectedAct->setShortcut(Qt::Key_U);
     this->uncheckAllAct->setShortcut(Qt::ALT + Qt::Key_U);
+    this->deleteCheckedAct->setShortcut(Qt::ALT + Qt::Key_D);
+    this->groupCheckedAct->setShortcut(Qt::ALT + Qt::Key_G);
+    this->lockCheckedAct->setShortcut(Qt::ALT + Qt::Key_L);
+    this->unlockCheckedAct->setShortcut(Qt::ALT + Qt::Key_U);
 
     this->computeSuperPixelsAct->setShortcut(Qt::ALT + Qt::Key_P);
     this->expandSelectedToSuperPixelAct->setShortcut(Qt::SHIFT + Qt::Key_E);
 
     this->OFTrackToNextFrameAct->setShortcut(Qt::SHIFT + Qt::Key_T);
+    this->OFTrackMultipleFramesAct->setShortcut(Qt::SHIFT + Qt::Key_Y);
+    this->interpolateLastBBsAct->setShortcut(Qt::SHIFT + Qt::Key_I);
 
 
     this->aboutAct = new QAction(tr("&About"), this);
@@ -648,6 +678,7 @@ void MainWindow::createMenus()
     this->viewMenu = new QMenu(tr("&View"), this);
     this->viewMenu->addAction(this->nextFrameAct);
     this->viewMenu->addAction(this->prevFrameAct);
+    this->viewMenu->addAction(this->jumpToLastAnnotatedFrameAct);
     this->viewMenu->addSeparator();
     this->viewMenu->addAction(this->scaleToOneAct);
     this->viewMenu->addAction(this->increaseScaleAct);
@@ -668,6 +699,10 @@ void MainWindow::createMenus()
     this->optionMenu->addAction(this->checkSelectedAct);
     this->optionMenu->addAction(this->uncheckSelectedAct);
     this->optionMenu->addAction(this->uncheckAllAct);
+    this->optionMenu->addAction(this->deleteCheckedAct);
+    this->optionMenu->addAction(this->groupCheckedAct);
+    this->optionMenu->addAction(this->lockCheckedAct);
+    this->optionMenu->addAction(this->unlockCheckedAct);
     this->optionMenu->addSeparator();
 
 
@@ -676,6 +711,8 @@ void MainWindow::createMenus()
     this->imageProcessingMenu->addAction(this->expandSelectedToSuperPixelAct);
     this->imageProcessingMenu->addSeparator();
     this->imageProcessingMenu->addAction(this->OFTrackToNextFrameAct);
+    this->imageProcessingMenu->addAction(this->OFTrackMultipleFramesAct);
+    this->imageProcessingMenu->addAction(this->interpolateLastBBsAct);
 
 
 

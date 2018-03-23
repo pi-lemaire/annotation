@@ -93,6 +93,7 @@ private slots:
     void openImage();
     void openVideo();
     void loadAnnotations();
+    void jumpToLast();
     void saveAnnotationsAs();
     void save();
     void saveCurrentImage();
@@ -169,6 +170,7 @@ private:
 
     QAction *nextFrameAct;
     QAction *prevFrameAct;
+    QAction *jumpToLastAnnotatedFrameAct;
 
     // pen related actions
     QAction *penWidthAct, *increasePenWidthAct, *decreasePenWidthAct, *penStyleRoundAct, *penStyleSquareAct;
@@ -179,14 +181,14 @@ private:
     QAction *scaleToOneAct, *increaseScaleAct, *decreaseScaleAct;
 
     // browser and selection related actionss
-    QAction *checkSelectedAct, *uncheckSelectedAct, *uncheckAllAct;
+    QAction *checkSelectedAct, *uncheckSelectedAct, *uncheckAllAct, *deleteCheckedAct, *groupCheckedAct, *lockCheckedAct, *unlockCheckedAct;
 
 
     // superpixels related stuff
     QAction *configureSuperPixelsAct, *computeSuperPixelsAct, *expandSelectedToSuperPixelAct;
 
     // optical flow tracking related stuff
-    QAction *configureOFTrackingAct, *OFTrackToNextFrameAct;
+    QAction *configureOFTrackingAct, *OFTrackToNextFrameAct, *OFTrackMultipleFramesAct, *interpolateLastBBsAct;
 
 
 

@@ -443,6 +443,10 @@ public:
 
 
     void editAnnotationBoundingBox(int recordId, const cv::Rect2i& newBB);
+            // just a mean of editing a bounding box - also verifies that the object exists
+
+    void interpolateLastBoundingBoxes(int interpolateRecordLength);
+            // interpolate the bounding boxes of BB only objects between the N and and N-interpolateRecordLength frames
 
 
     int addAnnotation(const cv::Point2i& topLeftCorner, const cv::Point2i& bottomRightCorner, int whichClass, int forceObjectId=-1);

@@ -138,6 +138,8 @@ public slots:
     void computeSuperPixelsMap();
     void growAnnotationBySP();
     void OFTrackToNextFrame();
+    void OFTrackMultipleFrames();
+    void interpolateBBObjects();
 
 
 
@@ -195,6 +197,7 @@ private:
     AnnotationsSet *annotations;
     SuperPixelsAnnotate* SPAnnotate;
     OptFlowTracking* OFTracking;
+    int framesComputedForInterpolation;
 };
 
 #endif

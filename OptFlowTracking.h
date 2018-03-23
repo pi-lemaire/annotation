@@ -18,6 +18,8 @@ public:
 
     void trackAnnotations();
 
+    int getInterpolateLength() const { return this->interpolateLength; }
+
 
 protected:
     virtual void initParamsHandler();
@@ -38,6 +40,8 @@ private:
     int polyN;
     double polySigma;
     bool gaussianWindow;
+
+    int interpolateLength;
 
     // cv::Mat lastResult;
 
