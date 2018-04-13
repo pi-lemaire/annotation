@@ -1020,7 +1020,9 @@ void AnnotateArea::updateStatusBar()
     else
         openedMsg = tr("No File Opened");
 
-    const QString modeMsg = this->BBClassOnly ? tr(" --Bounding Boxes Editing Mode-- ") : tr(" --Pixel Level Editing Mode-- ");
+    QString modeMsg = this->BBClassOnly ? tr(" --Bounding Boxes Editing Mode - on class '") : tr(" --Pixel Level Editing Mode - on class '");
+    modeMsg += QString::fromStdString(this->annotations->getConfig().getProperty(this->selectedClass).className) + "'--";
+
     const QString rubberMsg = this->rubberMode ? tr("  --RUBBER MODE ON-- ") : "";
     //const QString recordingMsg = (videoSaveName.length()>3) ? tr(" > \"%1\"").arg(videoSaveName) : "";
 
