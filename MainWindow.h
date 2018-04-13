@@ -86,6 +86,7 @@ protected:
 public slots:
     void selectAnnot(int);
     void updateActionsAvailability();
+    void updateStatusBarMsg(const QString&);
 
 
 
@@ -185,7 +186,7 @@ private:
 
 
     // superpixels related stuff
-    QAction *configureSuperPixelsAct, *computeSuperPixelsAct, *expandSelectedToSuperPixelAct;
+    QAction *configureSuperPixelsAct, *computeSuperPixelsAct, *expandSelectedToSuperPixelAct, *clearSuperPixelsAct;
 
     // optical flow tracking related stuff
     QAction *configureOFTrackingAct, *OFTrackToNextFrameAct, *OFTrackMultipleFramesAct, *interpolateLastBBsAct;

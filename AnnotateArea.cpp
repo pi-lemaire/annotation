@@ -93,6 +93,8 @@ AnnotateArea::AnnotateArea(AnnotationsSet* annotsSet, SuperPixelsAnnotate* SPAnn
     // selecting the first available class
     this->selectClassId(1);
     this->selectedObjectId = -1;
+
+    this->updateStatusBar();
 }
 
 
@@ -109,6 +111,8 @@ bool AnnotateArea::openImage(const QString &fileName)
 
     this->selectAnnotation(-1);
 
+    this->updateStatusBar();
+
     return true;
 }
 
@@ -124,6 +128,8 @@ bool AnnotateArea::openVideo(const QString &fileName)
     this->updatePaintImages();
 
     this->selectAnnotation(-1);
+
+    this->updateStatusBar();
 
     return true;
 }
@@ -143,6 +149,8 @@ bool AnnotateArea::openAnnotations(const QString &fileName)
     this->updatePaintImages();
 
     this->selectAnnotation(-1);
+
+    this->updateStatusBar();
 
     return true;
 }
@@ -225,6 +233,8 @@ void AnnotateArea::setScale(float newScale)
     }
 
     this->update();
+
+    this->updateStatusBar();
 }
 
 
@@ -301,6 +311,8 @@ void AnnotateArea::displayNextFrame()
         // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
         update();
+
+        this->updateStatusBar();
     }
 }
 
@@ -341,6 +353,8 @@ bool AnnotateArea::displayFrame(int id)
         // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
         update();
+
+        this->updateStatusBar();
 
         return true;
     }
@@ -414,6 +428,8 @@ void AnnotateArea::switchRubberMode()
 {
     this->rubberMode = !this->rubberMode;
     this->setPenWidth(this->myPenWidth);
+
+    this->updateStatusBar();
 }
 
 
@@ -424,6 +440,8 @@ void AnnotateArea::selectClassId(int classId)
     this->myPenColor = QtCvUtils::cvVec3bToQColor( this->annotations->getConfig().getProperty(classId).displayRGBColor );
 
     this->BBClassOnly = (this->annotations->getConfig().getProperty(classId).classType == _ACT_BoundingBoxOnly);
+
+    this->updateStatusBar();
 }
 
 
@@ -456,11 +474,34 @@ void AnnotateArea::selectAnnotation(int annotId)
 
 void AnnotateArea::computeSuperPixelsMap()
 {
+    // compute the SP map
     this->SPAnnotate->buildSPMap();
 
-    // force an update of the whole image
+    // we will force an update of the whole image, so we first need to define the bounding box
     QRect updateArea = QRect(QPoint(0,0), this->BackgroundImage.size());
+
+    // generate the corresponding QImage
+    this->SPContoursImage.fill(_AA_CI_NoC);
+
+    if (this->SPAnnotate->getContoursMask().data)
+    {
+        for (int i=updateArea.top(); i<=updateArea.bottom(); i++)
+        {
+            for (int j=updateArea.left(); j<=updateArea.right(); j++)
+            {
+                unsigned int currContourColor = _AA_CI_NoC;
+
+                if (this->SPAnnotate->getContoursMask().at<uchar>(i,j) > 0)
+                    currContourColor = _AA_CI_NotSelC;
+
+                this->SPContoursImage.setPixel(j,i,currContourColor);
+            }
+        }
+    }
+
+    // update the paint images and the display image
     this->updatePaintImages(updateArea, true);
+
     this->update();
 }
 
@@ -479,6 +520,21 @@ void AnnotateArea::growAnnotationBySP()
     }
 }
 
+
+void AnnotateArea::clearSPMap()
+{
+    this->SPAnnotate->clearMap();
+    // we will force an update of the whole image, so we first need to define the bounding box
+    QRect updateArea = QRect(QPoint(0,0), this->BackgroundImage.size());
+
+    // generate the corresponding QImage
+    this->SPContoursImage.fill(_AA_CI_NoC);
+
+    // update the paint images and the display image
+    this->updatePaintImages(updateArea, true);
+
+    this->update();
+}
 
 
 
@@ -619,49 +675,49 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
                 // simply fill the right position... it might have been possible to encode this kind of information but I'm a bit lazy there
                 if (topActive && leftActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_TopLeft;
+                    // top left corner selected
                     this->currentBBEditionStyle = _BBES_Corner;
                     this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.br().y, 1, 1);
                 }
                 else if (topActive && !leftActive && !rightActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_Top;
+                    // top side selected
                     this->currentBBEditionStyle = _BBES_Vertical;
                     this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.br().y, currBB.width+1, 1);
                 }
                 else if (topActive && rightActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_TopRight;
+                    // top right corner selected
                     this->currentBBEditionStyle = _BBES_Corner;
                     this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.br().y, 1, 1);
                 }
                 else if (rightActive && !bottomActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_Right;
+                    // right side selected
                     this->currentBBEditionStyle = _BBES_Horizontal;
                     this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, 1, currBB.height+1);
                 }
                 else if (rightActive && bottomActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_BottomRight;
+                    // bottom right side selected
                     this->currentBBEditionStyle = _BBES_Corner;
                     this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, 1, 1);
                 }
                 else if (bottomActive && !leftActive && !rightActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_Bottom;
+                    // bottom side selected
                     this->currentBBEditionStyle = _BBES_Vertical;
                     this->currentBBEditionFixedRect = QRect(currBB.tl().x, currBB.tl().y, currBB.width+1, 1);
                 }
                 else if (bottomActive && leftActive)
                 {
-                    this->BBWhichCornerSelected = _BBEM_BottomLeft;
+                    // bottom left corner selected
                     this->currentBBEditionStyle = _BBES_Corner;
                     this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.tl().y, 1, 1);
                 }
                 else
                 {
-                    this->BBWhichCornerSelected = _BBEM_Left;
+                    // left side selected
                     this->currentBBEditionStyle = _BBES_Horizontal;
                     this->currentBBEditionFixedRect = QRect(currBB.br().x, currBB.tl().y, 1, currBB.height+1);
                 }
@@ -677,8 +733,6 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
                                                                            cv::Point2i(actualInImgPos.x()+1, actualInImgPos.y()+1), this->selectedClass );
 
                 // by default, work in BottomRight edition mode
-                this->BBWhichCornerSelected = _BBEM_BottomRight;
-
                 this->currentBBEditionStyle = _BBES_Corner;
                 this->currentBBEditionFixedRect = QRect(actualInImgPos, QSize(1,1));
 
@@ -954,6 +1008,36 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
 
 
 
+void AnnotateArea::updateStatusBar()
+{
+
+    // float speedFactor = (skipFrames>_VideoViewer_default_SkipFrames) ? (float)skipFrames : ((float)_VideoViewer_default_TimerInterval / (float)nextFrameTimer->interval() );
+    QString openedMsg;
+    if (this->annotations->isImageOpen())
+        openedMsg = tr("Image Opened: \"%1\"").arg(QDir::toNativeSeparators(QString::fromStdString(this->annotations->getOpenedFileName())));
+    else if (this->annotations->isVideoOpen())
+        openedMsg = tr("Video Opened: \"%1\" at frame %2").arg(QDir::toNativeSeparators(QString::fromStdString(this->annotations->getOpenedFileName()))).arg(this->annotations->getCurrentFramePosition());
+    else
+        openedMsg = tr("No File Opened");
+
+    const QString modeMsg = this->BBClassOnly ? tr(" --Bounding Boxes Editing Mode-- ") : tr(" --Pixel Level Editing Mode-- ");
+    const QString rubberMsg = this->rubberMode ? tr("  --RUBBER MODE ON-- ") : "";
+    //const QString recordingMsg = (videoSaveName.length()>3) ? tr(" > \"%1\"").arg(videoSaveName) : "";
+
+    const QString message = tr("%1%2%3--- Zoom: x%4")
+        .arg(openedMsg).arg(modeMsg).arg(rubberMsg).arg(this->scaleFactor);
+    // this->statusBar()->showMessage(message);
+    emit newStatusBarMessage(message);
+}
+
+
+
+
+
+
+
+
+
 
 void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
 {
@@ -1147,7 +1231,7 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
         }
 
         this->ContoursImage.fill(_AA_CI_NoC);
-        this->SPContoursImage.fill(_AA_CI_NoC);
+        // this->SPContoursImage.fill(_AA_CI_NoC);
 
         // perhaps it's enough already? use the annotations index to know if we need to go any further
         const std::vector<int>& currentFrameAnnots = this->annotations->getRecord().getFrameContentIds(this->annotations->getCurrentFramePosition());
@@ -1221,7 +1305,7 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
 
 
 
-
+    /*
     if (this->SPAnnotate->getContoursMask().data)
     {
         for (int i=localROI.top(); i<=localROI.bottom(); i++)
@@ -1237,6 +1321,7 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
             }
         }
     }
+    */
 
     // this->ObjectImage = QImage(this->BackgroundImage.size(), QImage::Format_Mono);
 }

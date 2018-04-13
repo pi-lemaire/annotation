@@ -1,0 +1,398 @@
+README on the annotations software
+
+I. Introduction
+
+This software's primary function is to help developers and users to acquire as
+quickly as possible a set of annotations on images and videos.
+This software was specifically designed to handle the case of circulation videos
+acquired from a cable drone. Ideally, the annotations for such data should embed
+pixel-level annotations (for the road, also hypothetically for vehicles) and/or
+bounding boxes on every vehicle, and their identification across all frames for
+tracking purposes.
+
+On such images, We can not rely on the single, textual labelling of images as a
+whole. We need to have local insights, such as the location of a given object,
+etc.
+
+Object annotations can be defined under various criterions.
+
+Pixel level vs bounding-boxes (BBs):
+- pixel level: every pixel can belong to a class or an object. Albeit the most
+  powerful option, it can be very time-consuming to perform such an annotation.
+- Bounding-Boxes: every object is approximated by its bounding box (BB), that is
+  the area within the image where the object is located.
+
+Single objects class vs multiple object class:
+- single objects class: in most segmentation applications, simply knowing the
+  class of a pixel without clustering them into separate objects is satisfactory
+- multiple objects class: in the case of an objects tracking application,
+  we are not interested only in knowing the class of pixels or BBs, but we are
+  also interested in knowing their identities. There can be simultaneously
+  several independent objects of the same class inside a single image or video.
+
+We designed this application so that we're able to annotate images or videos
+according to all four criterions at the same time. We made the following
+assumptions:
+- At pixel level, one pixel can only belong to one single class. No pixel shall
+  belong to several classes or several objects.
+- Annotating objects using only Bounding-Boxes makes sense only when we're in
+  the presence of a multiple objects class. Nevertheless, being able to annotate
+  several objects within a given class is permissive and doesn't prevent anyone
+  from using such annotation style for a single objects class.
+
+This application was developed in C++. It makes extensive use of both OpenCV and
+Qt libraries, for images handling, image processing and its user interface. It
+uses OpenCV's primitives for all of the image/video file opening and saving
+procedures. It was developed under QtCreator on MacOSX, using pkgConfig.
+
+
+
+
+II. Compiling the application
+
+The application requires Qt 5.1 or more, as well as OpenCV 3.3 or more.
+To be completed...
+
+
+
+
+
+III. Using the software
+
+III.1) Inner Working and Configuration
+
+First and foremost, before using this it, one has to understand how classes and
+objects work, and the settings of the application.
+As mentioned before, when annotating images and videos, several options are
+available: dense, pixel-level annotations or bounding-boxes annotations, single
+object classes or multiple objects classes.
+
+Such annotation modes are defined in 'AnnotationsSet.h' under the following
+definition, for every individual class
+enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects, _ACT_BoundingBoxOnly };
+- _ACT_Uniform designates a single-object class annotation at pixel level,
+- _ACT_MultipleObjects a multiple-objects class annotation at pixel-level
+- _ACT_BoundingBoxOnly a multiple-objects class annotation using BBs.
+
+The first two modes require the annotated data to be saved in the shape of an
+image file, where the pixels properties (which class and, when needed, which
+object ID) are encoded into their color as a 3x8-bit RGB value.
+The third mode (Boundig Boxes Only) only requires the saving of annotated data
+under the shape of textual data.
+In any case, even in pixel-level annotation mode, the bounding box of every
+object is stored into a textual data file, as XML, YAML or JSON.
+
+
+Every class embeds several properties (as defined in the class
+AnnotationsProperties in 'AnnotationsSet.h'), such as:
+- an annotation mode (see above) (classType)
+- a class name (className)
+- a display color (in 3x8 bits RGB value) (displayRGBColor)
+- a recording min color value (in 3x8 bits BGR value) (minIdBGRRecRange)
+- a recording max color value (in 3x8 bits BGR value) (maxIdBGRRecRange)
+
+When annotating under the _ACT_MultipleObjects mode, pixels in the saving image
+file need to encode both the class and the object id. This is done by encoding
+the ID into the available bits space following the B->G->R order between
+minIdBGRRecRange and maxIdBGRRecRange. Note that every component of
+maxIdBGRRecRange must be superior or equal to the corresponding one in
+minIdBGRRecRange.
+Also, the (0,0,0) value is reserved as a "None" pixel value (doesn't belong to
+any object nor class)
+For instance, setting (0,255,255) as minIdBGRRecRange and (255,255,255) as
+maxIdBGRRecRange allows the object Id to be encoded from 0 to 255 on the B
+component. Any other value where G and R are different from 255 can be used for
+another class or object.
+minIdBGRRecRange = (0,0,255) and maxIdBGRRecRange = (19,19,255) will allow us to
+encode the object id over 400 possible combinations:
+ObjId = 20x{G value}  + {B value}
+
+
+When annotating under the _ACT_Uniform class type, only the minIdBGRRecRange
+value is used for storing the information into the output image file.
+maxIdBGRRecRange is never evaluated in such a case. As a convention, we would
+advise to set maxIdBGRRecRange = (0,0,0) when setting a _ACT_Uniform
+class.
+minIdBGRRecRange and maxIdBGRRecRange are never used for a _ACT_BoundingBoxOnly
+type of annotation.
+
+Please note that the recording ranges have to be separate when several pixel
+level classes are being annotated. We don't want any ambiguity when loading
+back a file. This means that both minIdBGRRecRange and maxIdBGRRecRange should
+be out of the range of any other (minIdBGRRecRange,maxIdBGRRecRange)
+combination.
+
+In addition to the class properties, the configuration has to manage the files
+naming. The corresponding properties are stored in the AnnotationsConfig class:
+- imageFileNamingRule: for each image, or video frame, defines the location
+                       of the corresponding pixel-level annotations file
+- summaryFileNamingRule: for each annotated file (being an image or a video),
+                         defines the location of the file where informations
+                         are stored into textual form.
+
+
+The configuration itself is stored explicitly into a XML/YAML/JSON file, that
+can be loaded using the GUI. The methods that generate and load such a file are
+the following, all located in 'AnnotationsSet.h' and 'AnnotationsSet.cpp':
+void AnnotationsProperties::write(cv::FileStorage& fs) const
+void AnnotationsProperties::read(const cv::FileNode& node)
+void AnnotationsConfig::writeContentToYaml(cv::FileStorage& fs) const
+void AnnotationsConfig::readContentFromYaml(const cv::FileNode& fnd)
+Keywords used are defined right before the definitions of the corresponding
+classes in 'AnnotationsSet.h'
+
+The configuration file structure is pretty straightforward, here is an example:
+
+%YAML:1.0
+---
+AnnotationsSet:
+   Configuration:
+      ImageFilesNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/%FrNu%.png"
+      SummaryFileNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/summary.yaml"
+      ClassesDefinitions:
+         - { Name:Road, Type:0, DispColRGB:[ 85, 85, 85 ],
+             IdRecRangeMinBGR:[ 127, 127, 0 ], IdRecRangeMaxBGR:[ 0, 0,
+             0 ] }
+         - { Name:Car, Type:1, DispColRGB:[ 255, 0, 0 ],
+             IdRecRangeMinBGR:[ 0, 0, 127 ], IdRecRangeMaxBGR:[ 255, 255,
+             255 ] }
+         - { Name:Truck, Type:1, DispColRGB:[ 0, 127, 0 ],
+             IdRecRangeMinBGR:[ 0, 0, 85 ], IdRecRangeMaxBGR:[ 255, 255,
+             100 ] }
+         - { Name:Utility, Type:1, DispColRGB:[ 0, 0, 255 ],
+             IdRecRangeMinBGR:[ 0, 0, 50 ], IdRecRangeMaxBGR:[ 255, 255,
+             84 ] }
+
+Type is an integer which value corresponds to the position into the previously
+mentioned AnnotationClassType enum, starting from 0.
+This means that 0 corresponds to _ACT_Uniform, 1 to _ACT_MultipleObjects, etc.
+The other parameters seems quite explicit.
+
+Both ImageFilesNamingRule and SummaryFileNamingRule use keywords, which are
+specified directly before the definition of the AnnotationsConfig class
+As of now,
+- %OrImPa%" is replaced by the original annotated file path,
+- "%OrImFiNa%" by the original annotated file name,
+- "%FrNu%" by the frame number (when annotating a video), starting from 0
+
+It is recommended that images are saved in .png format, and summary files into
+.yaml or .json format, for optimal readability.
+
+
+
+
+
+III.2) Annotating data
+
+III.2.a) Basic usage
+
+The interface consists in three connected windows.
+- The main Annotating Area, where the image or the video frame is displayed, and
+  where the user is able to perform actual annotating operations using the
+  mouse. All related declarations and behavior are defined within the
+  'AnnotateArea.h' / 'AnnotateArea.cpp' couple
+- The Class selection browser, where the user selects on which class of objects
+  he is working. The behavior of this section is defined in
+  'DialogClassSelection.h' and 'DialogClassSelection.cpp'
+- The Objects selection browser, where the user is able to display the various
+  annotated objects, and perform operation on them such as Delete, Group, etc.
+  All related definitions can be found in 'AnnotationsBrowser.h' and
+  'AnnotationsBrowser.cpp'
+
+The connection between all of those objects is defined in 'MainWindow.h' and
+'MainWindow.cpp', as well as a general application menu, like any other
+application on the OS.
+
+Prior to loading a picture or a video that we wish to annotate, it is mandatory
+to load a configuration file using the "Settings" menu. A configuration file can
+be edited using any kind of text browser. Be careful about the syntax.
+Loading a picture or a video, or a previous annotation is done by using the
+"File" menus. When saving an annotations, the configuration is stored as well.
+It recalls the right image or video path, as well as the classes configuration.
+
+
+The Annotation Area works mainly on 2 operation modes : pixel-level and
+bounding-boxes only. Switching from one mode to the other is done by picking
+the appropriate class in the Class Selection Browser : selecting a Bounding
+-Boxes only class makes us switch to Bounding Boxes edition mode. Selecting any
+other type of class makes the Annotating Area work into pixel-level edition
+mode.
+
+When editing a video, it is possible to navigate through the video frames using
+the left and right arrows, as well as the corresponding entry in the application
+menu.
+
+
+III.2.a.i) Basic usage in pixel-level edition mode
+
+This edition mode is very similar to any basic picture drawing software. The
+user can simply click left on the image to draw an object that corresponds to
+the selected class. It is possible to zoom in and out using the + and - keys.
+The pencil width can be set using the menus or the up and down arrow keys. It is
+possible to set the pencil shape (round or square) using the menus. Starting a
+new annotation from a pixel that is already part from an annotation of the same
+class does not create a new object, even when editing a multiple objects class:
+it adds the newly annotated pixels to the pre-existing object.
+
+The user can also switch to rubber mode, where he can remove pixels from
+previous annotations. In this mode, the cursor turns white instead of black.
+
+It is possible to select objects using the right button click. When an object
+is selected, its contour is outlined by brighter pixels. Non-selected objects
+contours are outlined by darker pixels.
+Selecting an object makes its corresponding line in the objects browser be
+displayed with a bold font. We will discuss later about the objects browser
+functionalities. Clicking right on an empty area un-selects any previously
+selected annotation.
+
+We have added a "locks" property on classes and objects as well. When drawing
+a new object or erasing pixels, it is often desirable to guarantee that certain
+objects are not going to be affected by such operation. The "locks"
+functionality corresponds to this need. A complete class can be locked by
+checking its corresponding checkbox. Individual objects can be locked as well
+through the objects browser.
+
+
+III.2.a.ii) Basic usage in bounding-boxes edition mode
+
+Adding a new annotation is performed by clicking with the left button, then
+dragging the mouse over an empty area in the image. It is possible to adjust a
+previous annotation by clicking in the neighborhood (less than 5 pixels) of any
+corner or any line of a bounding box.
+
+Just like in pixel level mode, it is possible to select annotations using the
+right click, as long as we're in the close neighborhood (5 pixels) of any
+existing bounding box.
+
+
+
+III.2.b) Objects Browser
+
+The object browser allows us to navigate between the various annotations.
+
+The selected annotation (if any) is displayed in bold font.
+
+Annotations can be checked (or unchecked) by clicking the [ ] or [X] links.
+When one or several objects are checked, the following operations can be
+performed using the buttons below:
+- Delete: the checked object(s) is(are) permanently deleted
+- Group: the checked objects of similar class are grouped together. In this
+         scenario, different objects of a same, multiple-objects class are
+         merged to form an unique object. The final id is the lowest one amongst
+         the checked object ids.
+- Switch class: The checked object class is switched to the one selected in the
+                class browser window, when different. Note that we can only
+                switch class from pixel-level to another pixel-level class, or
+                from a BB-Only class to another BB-Only class.
+- Separate: This option is relevant only when annotating a video. The idea is to
+            specify that annotations with an identical class and an identical
+            object ID on different frames actually are independent objects. It
+            assigns a new object Id (while keeping the same class) to all of the
+            concerned annotations except the one with the lowest frame number.
+- Lock: Just as in the Class Selection Browser, this option locks checked
+        objects, meaning that another new pixel-level operation won't be able to
+        affect the locked objects.
+- Unlock: Simply disables the checked objects locked status, if any.
+
+A set of filters has also been added to the objects browser. Unfortunately, by
+the time when a lot of annotations were performed, the browser tends to slow
+down the display a lot. We have added filters over:
+- the displayed frame number (only display a limited interval of frames
+  surrounding the current one),
+- the class (only display objects of the currently selected class)
+- the object (only display the currently selected object in the browser)
+- the localization (only display objects within a close range of the currently
+  selected one).
+
+When annotating lengthy videos with a lot of objects, it is really important to
+understand and get familiar with such filters in order to navigate into the
+video.
+
+
+
+III.2.c) Image processing tools
+
+Several image processing tools are available to accelerate the annotation
+processus. The image processing tools setups are available in the "Settings"
+menu.
+
+III.2.c.i) Super Pixels Map
+
+The idea is to process a super pixels map on the image, so that instead of
+annotating pixels, we annotate super pixels. The idea is to perform a rough
+pixel-level annotation, then to expand it so that the rough pixel-level
+annotation now covers every super pixel's pixel.
+
+Such operation must be done in two times:
+- first, build the Super Pixels Map.
+- second, expand the selected annotations.
+
+It is obviously possible to clear the super pixels map and build a new one using
+different settings.
+
+Shortcuts are available for such operations, see the section III.2.d
+
+The actual source code is available in 'SuperPixelsAnnotate.h' and
+'SuperPixelsAnnotate.cpp'
+
+
+III.2.c.ii) Optical Flow Tracking
+
+The idea is to use optical flow properties to modify and update annotations over
+the course of a video. The optical flow is used to estimate affine transform
+parameters from the current frame to the next one. When launching the tracking,
+the application estimates the tracking parameters over every annotation and
+tries to track them in the following frames, then displays the next frame with
+the estimated position of every annotation on the previous frame.
+
+On the pixel-level annotations, the affine transform is calculated on a
+representative set of pixels forming the annotation. The affine transform is
+then applied to the binary mask and added on the new frame.
+Please beware that the transformations are evaluated in the order from which the
+annotations were created on the previous frame. This can impact greatly the
+result of the tracking when in case of occultations.
+
+On BB-Only annotations, the transform consists simply in a displacement over the
+x and y coordinates, using the median value of the x and y values inside the
+bounding box. Except when close to the image boundaries, tracked bounding boxes
+keep the same size between 2 frames. We have found the median on x and y values
+to be more accurate than some more elaborated model like computing the affine
+transform.
+When tracking BBs, it is possible to evaluate the tracking over the course of
+several frames instead of just one. The idea behind is that the user can compute
+the tracking automatically over 5 frames for instance, then correct the tracking
+marginally, then launch an interpolation for all intermediate frames. This
+accelerates the annotation process a lot.
+
+The actual source code is available in 'OptFlowTracking.h' and
+'OptFlowTracking.cpp'
+
+
+
+III.2.d) Shortcuts
+
+Shortcuts are defined in 'MainWindow.cpp' within the MainWindow::createActions()
+method. Action names seem pretty explicit to us, see the source code for more
+insights.
+
+
+
+
+
+IV. Code Structure
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.

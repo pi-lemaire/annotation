@@ -58,7 +58,7 @@ void DialogClassSelection::OnClassSelect(QListWidgetItem *)
 }
 
 
-void DialogClassSelection::OnClassCheck(QListWidgetItem *item)
+void DialogClassSelection::OnClassCheck(QListWidgetItem *)
 {
     for (int i=0; i<this->annots->getConfig().getPropsNumber(); i++)
     {

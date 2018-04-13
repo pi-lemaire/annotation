@@ -121,6 +121,7 @@ MainWindow::MainWindow()
 
     QObject::connect(this->annotateArea, SIGNAL(selectedObject(int)), this->annotsBrowser, SLOT(updateBrowser(int)));
     QObject::connect(this->annotateArea, SIGNAL(updateSignal()), this, SLOT(updateActionsAvailability()));
+    QObject::connect(this->annotateArea, SIGNAL(newStatusBarMessage(const QString&)), this, SLOT(updateStatusBarMsg(const QString&)));
 
 
 
@@ -468,6 +469,11 @@ void MainWindow::decreaseZoom()
 
 
 
+void MainWindow::updateStatusBarMsg(const QString& msg)
+{
+    this->statusBar()->showMessage(msg);
+}
+
 
 
 
@@ -609,6 +615,8 @@ void MainWindow::createActions()
     connect(this->computeSuperPixelsAct, SIGNAL(triggered()), this->annotateArea, SLOT(computeSuperPixelsMap()));
     this->expandSelectedToSuperPixelAct = new QAction(tr("Expand the Selected Annotation"), this);
     connect(this->expandSelectedToSuperPixelAct, SIGNAL(triggered()), this->annotateArea, SLOT(growAnnotationBySP()));
+    this->clearSuperPixelsAct = new QAction(tr("Clear the Super Pixels map"), this);
+    connect(this->clearSuperPixelsAct, SIGNAL(triggered()), this->annotateArea, SLOT(clearSPMap()));
 
 
     this->configureOFTrackingAct = new QAction(tr("Optical Flow Tracking Settings"), this);
@@ -643,6 +651,7 @@ void MainWindow::createActions()
 
     this->computeSuperPixelsAct->setShortcut(Qt::ALT + Qt::Key_P);
     this->expandSelectedToSuperPixelAct->setShortcut(Qt::SHIFT + Qt::Key_E);
+    this->clearSuperPixelsAct->setShortcut(Qt::SHIFT + Qt::Key_K);
 
     this->OFTrackToNextFrameAct->setShortcut(Qt::SHIFT + Qt::Key_T);
     this->OFTrackMultipleFramesAct->setShortcut(Qt::SHIFT + Qt::Key_Y);
@@ -709,6 +718,7 @@ void MainWindow::createMenus()
     this->imageProcessingMenu = new QMenu(tr("&Image Processing"), this);
     this->imageProcessingMenu->addAction(this->computeSuperPixelsAct);
     this->imageProcessingMenu->addAction(this->expandSelectedToSuperPixelAct);
+    this->imageProcessingMenu->addAction(this->clearSuperPixelsAct);
     this->imageProcessingMenu->addSeparator();
     this->imageProcessingMenu->addAction(this->OFTrackToNextFrameAct);
     this->imageProcessingMenu->addAction(this->OFTrackMultipleFramesAct);

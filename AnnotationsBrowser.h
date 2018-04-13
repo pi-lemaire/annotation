@@ -41,15 +41,15 @@ public slots:
     void checkSelected();       // allows to check an object already selected (for instance using the right click), for browser operations such as delete, merge, etc
     void uncheckSelected();     // remove the selected annotation from the checked list
     void uncheckAll();          // clear the checked list
-
-private slots:
     void GroupAnnotationsClicked();
     void SeparateAnnotationsClicked();
     void DeleteAnnotationsClicked();
     void SwitchAnnotationsClassClicked();
-    void BrowserLinkClicked(const QUrl&);
     void LockAnnotationsClicked();
     void UnlockAnnotationsClicked();
+
+private slots:
+    void BrowserLinkClicked(const QUrl&);
     void filtersModified();
 
 

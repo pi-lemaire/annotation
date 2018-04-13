@@ -77,7 +77,7 @@
 
 enum cursorShape { AA_CS_round, AA_CS_square };
 
-enum BBCornerSelected { _BBEM_TopLeft, _BBEM_Top, _BBEM_TopRight, _BBEM_Right, _BBEM_BottomRight, _BBEM_Bottom, _BBEM_BottomLeft, _BBEM_Left };
+// enum BBCornerSelected { _BBEM_TopLeft, _BBEM_Top, _BBEM_TopRight, _BBEM_Right, _BBEM_BottomRight, _BBEM_Bottom, _BBEM_BottomLeft, _BBEM_Left };
 
 enum BBEditionStyle { _BBES_Corner, _BBES_Vertical, _BBES_Horizontal };
 
@@ -135,8 +135,11 @@ public slots:
     void selectClassId(int);
     void selectAnnotation(int);
 
+    // image processing slots
     void computeSuperPixelsMap();
     void growAnnotationBySP();
+    void clearSPMap();
+
     void OFTrackToNextFrame();
     void OFTrackMultipleFrames();
     void interpolateBBObjects();
@@ -147,6 +150,7 @@ signals:
     void selectedObject(int);
     void updateSignal();
     void sizeChangedByFactor(float);
+    void newStatusBarMessage(const QString&);
 
 
 protected:
@@ -157,6 +161,8 @@ protected:
     //void resizeEvent(QResizeEvent *event) override;
 
 private:
+    void updateStatusBar();
+
     void drawLineTo(const QPoint &endPoint);
     //void resizeImage(QImage *image, const QSize &newSize);
 
@@ -175,7 +181,7 @@ private:
 
     // bool modified;
     bool scribbling, rubberMode, BBClassOnly;
-    BBCornerSelected BBWhichCornerSelected;
+    // BBCornerSelected BBWhichCornerSelected;
     BBEditionStyle currentBBEditionStyle;
     QRect currentBBEditionFixedRect;
 
