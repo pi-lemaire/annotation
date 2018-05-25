@@ -6,7 +6,7 @@
 #include <vector>
 #include <map>
 #include <typeinfo>
-
+#include <memory> // For std::unique_ptr
 
 
 
