@@ -55,7 +55,7 @@ private slots:
 
 signals:
     void annotationSelected(int);
-    void changesCausedByTheBrowser();
+    void changesCausedByTheBrowser(QRect);
 
 
 private:

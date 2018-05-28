@@ -323,9 +323,11 @@ void AnnotateArea::displayPrevFrame()
 }
 
 
-void AnnotateArea::contentModified()
+void AnnotateArea::contentModified(QRect areaModified)
 {
+    //this->updatePaintImages(areaModified.adjusted(-2,-2,2,2), false);
     this->updatePaintImages();
+    this->update(areaModified.adjusted(-2,-2,2,2));
     // this->selectAnnotation(this->selectedObjectId);
 }
 

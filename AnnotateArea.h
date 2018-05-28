@@ -127,7 +127,7 @@ public slots:
     void displayNextFrame();
     void displayPrevFrame();
 
-    void contentModified();
+    void contentModified(QRect);
 
     void clearImageAnnotations();
     void print();

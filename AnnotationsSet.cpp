@@ -1114,10 +1114,10 @@ bool AnnotationsSet::loadFrame(int fId)
     }
     else
     {
-        // last case : we're out of the buffer and it isn't a case where we're supposed to read forward - which means that we want to frames before the buffer
+        // last case : we're out of the buffer and it isn't a case where we're supposed to read forward - which means that we want to display a frame before the buffer
 
         // i've witnessed a lot of situations where the frames set counter isn't working properly...
-        // so i'm doing it "the hardcore way" : loading the video back and reading all the frames until i reach the buffer again
+        // so i'm doing it "the hardcore way" : loading the video back and reading all the frames until i reach the required frame
         if (!this->loadOriginalVideo(this->imageFilePath + this->videoFileName))
             return false;
 
@@ -1191,8 +1191,9 @@ bool AnnotationsSet::canReadNextFrame() const
 
 bool AnnotationsSet::canReadPrevFrame() const
 {
-    // a video has been opened, we don't want to be at the very beginning of the video and we don't want to be at the lowest end of the buffer
-    return (this->isVideoOpen() && (this->currentImgIndex>0) && ((this->maxImgReached-this->currentImgIndex+1)<this->bufferLength));
+    // a video has been opened, we don't want to be at the very beginning of the video
+    // return (this->isVideoOpen() && (this->currentImgIndex>0) && ((this->maxImgReached-this->currentImgIndex+1)<this->bufferLength));
+    return (this->isVideoOpen() && (this->currentImgIndex>0));
 }
 
 
@@ -2659,7 +2660,8 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
 
 
 
-    if (this->config.getProperty(newClassId).classType == _ACT_BoundingBoxOnly)
+    // if (this->config.getProperty(newClassId).classType == _ACT_BoundingBoxOnly)
+    if (this->config.getProperty(newClassId).classType != _ACT_BoundingBoxOnly)
     {
         // if it's bounding boxes only, we won't ever need to modify some images
 

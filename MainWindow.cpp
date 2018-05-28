@@ -117,7 +117,7 @@ MainWindow::MainWindow()
     QObject::connect(this->classSelection, SIGNAL(classSelected(int)), this->annotsBrowser, SLOT(setClassSelected(int)));
 
     QObject::connect(this->annotsBrowser, SIGNAL(annotationSelected(int)), this, SLOT(selectAnnot(int)));
-    QObject::connect(this->annotsBrowser, SIGNAL(changesCausedByTheBrowser()), this->annotateArea, SLOT(contentModified()));
+    QObject::connect(this->annotsBrowser, SIGNAL(changesCausedByTheBrowser(QRect)), this->annotateArea, SLOT(contentModified(QRect)));
 
     QObject::connect(this->annotateArea, SIGNAL(selectedObject(int)), this->annotsBrowser, SLOT(updateBrowser(int)));
     QObject::connect(this->annotateArea, SIGNAL(updateSignal()), this, SLOT(updateActionsAvailability()));

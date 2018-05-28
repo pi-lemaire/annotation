@@ -381,13 +381,28 @@ void AnnotationsBrowser::updateBrowser(int selected)
 
 void AnnotationsBrowser::GroupAnnotationsClicked()
 {
+    if (this->linesChecked.size()<1)
+        return;
+
+    // get the modified area, check whether this operation affects the currently selected annotation
+    QRect modifiedArea;
+    //bool deletedSelected = false;
+
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        if (k==0)
+            modifiedArea  = QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+        else
+            modifiedArea |= QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+    }
+
     this->annots->mergeAnnotations(this->getCheckedRecordIds());
 
     this->linesChecked.clear();
 
-    emit changesCausedByTheBrowser();
+    emit changesCausedByTheBrowser(modifiedArea);
 
-    emit annotationSelected(-1);
+    this->updateBrowser(-1);
 }
 
 void AnnotationsBrowser::SeparateAnnotationsClicked()
@@ -406,25 +421,73 @@ void AnnotationsBrowser::SeparateAnnotationsClicked()
 
 void AnnotationsBrowser::DeleteAnnotationsClicked()
 {
+    // some safety net...
+    if (this->linesChecked.size()<1)
+        return;
+
+    // get the modified area, check whether this operation affects the currently selected annotation
+    QRect modifiedArea;
+    bool deletedSelected = false;
+
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        if (this->linesChecked[k].recordId == this->currentAnnotSelected)
+            deletedSelected = true;
+
+        if (k==0)
+            modifiedArea  = QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+        else
+            modifiedArea |= QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+    }
+
+    // qDebug() << modifiedArea;
+
+    // perform the actual modification
     this->annots->deleteAnnotations(this->getCheckedRecordIds());
 
+    // clear the checked lines
     this->linesChecked.clear();
 
-    emit changesCausedByTheBrowser();
+    // specify that some changes were performed
+    emit changesCausedByTheBrowser(modifiedArea);
 
-    emit annotationSelected(-1);
+    // update the selection accordingly
+    if (deletedSelected)
+        emit annotationSelected(-1);
+    else
+        this->updateBrowser(this->currentAnnotSelected);
+        //emit annotationSelected(this->currentAnnotSelected);
 }
 
 
 void AnnotationsBrowser::SwitchAnnotationsClassClicked()
 {
+    // get the modified area, check whether this operation affects the currently selected annotation
+    QRect modifiedArea;
+    bool deletedSelected = false;
+
+    for (size_t k=0; k<this->linesChecked.size(); k++)
+    {
+        if (this->linesChecked[k].recordId == this->currentAnnotSelected)
+            deletedSelected = true;
+
+        if (k==0)
+            modifiedArea  = QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+        else
+            modifiedArea |= QtCvUtils::cvRect2iToQRect( this->annots->getRecord().getAnnotationById(this->linesChecked[k].recordId).BoundingBox );
+    }
+
+
     this->annots->switchAnnotationsToClass(this->getCheckedRecordIds(), this->currentClassSelected);
 
     this->linesChecked.clear();
 
-    emit changesCausedByTheBrowser();
+    emit changesCausedByTheBrowser(modifiedArea);
 
-    emit annotationSelected(-1);
+    if (deletedSelected)
+        emit annotationSelected(-1);
+    else
+        this->updateBrowser(this->currentAnnotSelected);
 }
 
 
