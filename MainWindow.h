@@ -97,6 +97,7 @@ private slots:
     void jumpToLast();
     void saveAnnotationsAs();
     void save();
+    void saveAsCsv();
     void saveCurrentImage();
     void closeFile();
 
@@ -166,6 +167,7 @@ private:
 
     QAction *saveAct;
     QAction *saveAnnotationsAct;
+    QAction *saveAsCsvAct;
     QAction *saveCurrentImageAct;
     QAction *exitAct;
 

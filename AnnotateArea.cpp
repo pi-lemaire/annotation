@@ -562,6 +562,8 @@ void AnnotateArea::OFTrackToNextFrame()
 
         this->selectAnnotation(this->selectedObjectId);
 
+        this->updateStatusBar();
+
         // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
         update();
@@ -597,6 +599,8 @@ void AnnotateArea::OFTrackMultipleFrames()
     this->updatePaintImages();
 
     this->selectAnnotation(this->selectedObjectId);
+
+    this->updateStatusBar();
 
     // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
@@ -823,6 +827,16 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
             for (int j=0; j<this->ObjectROI.width(); j++)
             {
                 // qDebug() << this->ObjectImage.pixelColor(j+this->ObjectROI.left(), i+this->ObjectROI.top());
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
+                if (this->ObjectImage.pixelColor(j+this->ObjectROI.left(), i+this->ObjectROI.top()).black() > 127)
+                    currentAnnotationMat.at<uchar>(i,j) = 255;
+#else
+                QRgb rgb = this->ObjectImage.pixel(j+this->ObjectROI.left(), i+this->ObjectROI.top());
+                QColor col(rgb);
+                if (col.black()>127)
+                    currentAnnotationMat.at<uchar>(i,j) = 255;
+#endif
 
                 if (this->ObjectImage.pixelColor(j+this->ObjectROI.left(), i+this->ObjectROI.top()).black() > 127)
                 //if (this->ObjectImage.pixel(j+this->ObjectROI.left(), i+this->ObjectROI.top())==Qt::color0)
@@ -1289,7 +1303,14 @@ void AnnotateArea::updatePaintImages(const QRect& ROI, bool contoursOnly)
         for (int j=localROI.left(); j<=localROI.right(); j++)
         {
             if (!contoursOnly)
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
                 this->PaintingImage.setPixelColor(j,i, classesColorList[this->annotations->getCurrentAnnotationsClasses().at<int16_t>(i,j)]);
+#else
+            {
+                QColor col = classesColorList[this->annotations->getCurrentAnnotationsClasses().at<int16_t>(i,j)];
+                this->PaintingImage.setPixel(j,i,col.rgba());
+            }
+#endif
 
             unsigned int currContourColor = _AA_CI_NoC;
             if (this->annotations->getCurrentContours().at<uchar>(i,j) > 0)

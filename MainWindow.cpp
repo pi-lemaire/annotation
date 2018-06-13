@@ -292,6 +292,21 @@ void MainWindow::save()
 }
 
 
+
+void MainWindow::saveAsCsv()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Annotations File"),
+                                                    QDir(QString::fromStdString(this->annotations->getDefaultAnnotationsSaveFileName())).absolutePath(),
+                                                    tr("CSV file (*.csv)"));
+    if (!fileName.isEmpty())
+    {
+        this->annotations->saveToCsv(fileName.toStdString());
+    }
+}
+
+
+
 void MainWindow::saveCurrentImage()
 {
     QString fileName = QFileDialog::getSaveFileName(this,
@@ -479,18 +494,12 @@ void MainWindow::updateStatusBarMsg(const QString& msg)
 
 void MainWindow::about()
 {
-    QMessageBox::about(this, tr("About Scribble"),
-            tr("<p>The <b>Scribble</b> example shows how to use QMainWindow as the "
-               "base widget for an application, and how to reimplement some of "
-               "QWidget's event handlers to receive the events generated for "
-               "the application's widgets:</p><p> We reimplement the mouse event "
-               "handlers to facilitate drawing, the paint event handler to "
-               "update the application and the resize event handler to optimize "
-               "the application's appearance. In addition we reimplement the "
-               "close event handler to intercept the close events before "
-               "terminating the application.</p><p> The example also demonstrates "
-               "how to use QPainter to draw an image in real time, as well as "
-               "to repaint widgets.</p>"));
+    QMessageBox::about(this, tr("An Annotation Tool"),
+           tr("<p>This tool is designed for a pixel-level or bounding-box-level"
+              "(or both) annotations on images or videos. This tool makes use"
+              "of computer vision techniques to speed-up the annotation process,"
+              "such as Optical Flow or SuperPixels maps.</p>"
+              "<p>See the readme file for more informations.</p>"));
 }
 
 void MainWindow::createActions()
@@ -515,6 +524,9 @@ void MainWindow::createActions()
 
     this->saveAnnotationsAct = new QAction(tr("&Save Annotations As"), this);
     connect(this->saveAnnotationsAct, SIGNAL(triggered()), this, SLOT(saveAnnotationsAs()));
+
+    this->saveAsCsvAct = new QAction(tr("&Save Annotations As a CSV file"), this);
+    connect(this->saveAsCsvAct, SIGNAL(triggered()), this, SLOT(saveAsCsv()));
 
     this->saveCurrentImageAct = new QAction(tr("Save &Current Annotation (single frame)"), this);
     connect(this->saveCurrentImageAct, SIGNAL(triggered()), this, SLOT(saveCurrentImage()));
@@ -677,6 +689,7 @@ void MainWindow::createMenus()
     this->fileMenu->addAction(this->saveAct);
     this->fileMenu->addAction(this->saveAnnotationsAct);
     this->fileMenu->addAction(this->saveCurrentImageAct);
+    this->fileMenu->addAction(this->saveAsCsvAct);
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->printAct);
     this->fileMenu->addSeparator();

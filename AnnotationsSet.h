@@ -218,6 +218,9 @@ private:
 
 
 
+
+const std::string _annotObj_Csv_FieldSeparator = ";";
+
 const std::string _AnnotObj_YAMLKey_Class = "Cl";
 const std::string _AnnotObj_YAMLKey_ObjId = "Ob";
 const std::string _AnnotObj_YAMLKey_Frame = "Fr";
@@ -238,6 +241,28 @@ public:
                    << _AnnotObj_YAMLKey_ObjId << this->ObjectId
                    << _AnnotObj_YAMLKey_Frame << this->FrameNumber
                    << _AnnotObj_YAMLKey_BBox  << this->BoundingBox << "}";
+    }
+
+    void writeToCsv(std::ostream& fs) const
+    {
+        fs << this->ClassId << _annotObj_Csv_FieldSeparator
+           << this->ObjectId << _annotObj_Csv_FieldSeparator
+           << this->FrameNumber << _annotObj_Csv_FieldSeparator
+           << this->BoundingBox.x << _annotObj_Csv_FieldSeparator
+           << this->BoundingBox.y << _annotObj_Csv_FieldSeparator
+           << this->BoundingBox.width << _annotObj_Csv_FieldSeparator
+           << this->BoundingBox.height << std::endl;
+    }
+
+    static void writeCsvHeader(std::ostream& fs)
+    {
+        fs << "ClassId" << _annotObj_Csv_FieldSeparator
+           << "ObjectId" << _annotObj_Csv_FieldSeparator
+           << "FrameNumber" << _annotObj_Csv_FieldSeparator
+           << "BB_x" << _annotObj_Csv_FieldSeparator
+           << "BB_y" << _annotObj_Csv_FieldSeparator
+           << "BB_width" << _annotObj_Csv_FieldSeparator
+           << "BB_height" << std::endl;
     }
 
     void read(const cv::FileNode& node)
@@ -316,6 +341,8 @@ public:
 
     void writeContentToYaml(cv::FileStorage& fs) const;
     void readContentFromYaml(const cv::FileNode& fnd);
+
+    void writeContentToCsv(std::ostream& fs) const;
 
 
 
@@ -421,6 +448,9 @@ public:
     // save the yaml file and the image file. forceFilename concerns the yaml file.
     // The boolean prevents the software from saving systematically even if no changes were done
     bool saveCurrentState(const std::string& forceFileName="", bool saveOnlyIfNecessary=false);
+
+    bool saveToCsv(const std::string& fileName) const;
+
 
 
     bool thereWereChangesPerformedUponCurrentAnnot() const { return this->changesPerformedUponCurrentAnnot; }

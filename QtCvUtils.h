@@ -134,6 +134,19 @@ namespace QtCvUtils
        QDir().mkpath(QFileInfo(filePath).absolutePath());
    }
 
+   inline bool fileExists(const std::string& fileName)
+   {
+       // found at https://stackoverflow.com/questions/10273816/how-to-check-whether-file-exists-in-qt-in-c
+       QFileInfo check_file(QString::fromStdString(fileName));
+
+       // check if file exists and if yes: Is it really a file and no directory?
+       if (check_file.exists() && check_file.isFile()) {
+           return true;
+       } else {
+           return false;
+       }
+   }
+
    inline std::string getDateTimeStr()
    {
        return QDateTime::currentDateTime().toString(Qt::ISODate).toStdString();

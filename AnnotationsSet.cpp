@@ -628,6 +628,16 @@ void AnnotationsRecord::writeContentToYaml(cv::FileStorage& fs) const
     fs << "]";
 }
 
+void AnnotationsRecord::writeContentToCsv(std::ostream &fs) const
+{
+    // we just suppose that the stream is open and use it as is, without any verification
+    AnnotationObject::writeCsvHeader(fs);
+    for (size_t k=0; k<this->record.size(); k++)
+    {
+        this->record[k].writeToCsv(fs);
+    }
+}
+
 
 
 void AnnotationsRecord::readContentFromYaml(const cv::FileNode& fnd)
@@ -1330,6 +1340,22 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName, bool sav
 
 
 
+bool AnnotationsSet::saveToCsv(const std::string& fileName) const
+{
+    std::ofstream fsOut;
+    fsOut.open(fileName.c_str(), std::ofstream::out);
+    if (!fsOut.is_open())
+        return false;
+
+    this->annotsRecord.writeContentToCsv(fsOut);
+
+    fsOut.close();
+
+    return true;
+}
+
+
+
 
 bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileName) const
 {
@@ -1351,6 +1377,10 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
     // this is the list of objects present in the image
     vector<int> presentObjects = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
 
+    // we prevent the app from saving an image if there's no pixel-level annotation
+    // emptyImage is there for such situation...
+    bool emptyImage = true;
+
     // compute the associations
     for (size_t k=0; k<presentObjects.size(); k++)
     {
@@ -1361,6 +1391,7 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
         if (this->config.getProperty(currentAnnotCaracs.ClassId).classType == _ACT_BoundingBoxOnly)
             continue;
 
+        emptyImage = false;
 
         // the way we store each possible occurrence uniquely is with the help of a Point2i
         Point2i objectRef(currentAnnotCaracs.ClassId, currentAnnotCaracs.ObjectId);
@@ -1477,6 +1508,11 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
         colorsIndexDst.push_back(currentAnnotColor);
         //colorsIndex[objectRef] = currentAnnotColor;
     }
+
+
+    // squeeze the rest of the method in case there's no pixel-level annotation to store
+    if (emptyImage)
+        return true;
 
 
     // generate a new image
@@ -2950,19 +2986,19 @@ void AnnotationsSet::loadAnnotationsImageFile(const std::string& fileName, cv::M
 
 void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const cv::Mat& classesMat, const cv::Mat& objIdsMat) const
 {
-    // this method only loads the data - unlike loadCurrentAnnotation, it takes for granted that the file is well formatted
-
     if (!classesMat.data || (classesMat.size() != objIdsMat.size()))
         return;
-
-    // generate the image that we will want to store
-    Mat generateIm = Mat::zeros(classesMat.size(), CV_8UC3);
 
 
     // look at the config and record the minColorIndex and the maxColorIndex, it is faster
     vector<Vec3b> minColorIndex, maxColorIndex;
     vector<Vec3i> dividersIndex;
     vector<bool> classUniform;
+
+
+    // if there is no such file already, don't create one if there's no pixel-level data in the annotations to store
+    bool emptyImage = !QtCvUtils::fileExists(fileName);
+
 
     // fill the vectors..
     for (int i=0; i<this->config.getPropsNumber(); i++)
@@ -2978,6 +3014,8 @@ void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const
             continue;
         }
 
+        emptyImage = false;
+
         minColorIndex.push_back(this->config.getProperty(i+1).minIdBGRRecRange);
 
         // warning : there's an exception when the class is uniform
@@ -2989,6 +3027,15 @@ void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const
         // already calculate the dividers
         dividersIndex.push_back( Vec3i((maxColorIndex[i][0]-minColorIndex[i][0]+1), (maxColorIndex[i][1]-minColorIndex[i][1]+1), (maxColorIndex[i][2]-minColorIndex[i][2]+1)) );
     }
+
+
+    // there's no need to go further
+    if (emptyImage)
+        return;
+
+
+    // generate the image that we will want to store
+    Mat generateIm = Mat::zeros(classesMat.size(), CV_8UC3);
 
 
     // run through the image content and fill the pixel colors...
