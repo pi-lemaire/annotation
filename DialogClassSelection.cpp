@@ -5,7 +5,8 @@
 
 
 
-DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* parent, Qt::WindowFlags flags): QDialog( parent, flags )
+// DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* parent, Qt::WindowFlags flags): QDialog( parent, flags )
+DialogClassSelection::DialogClassSelection(AnnotationsSet* annotsSet, QWidget* parent): QDialog( parent )
 {
     // storing the pointer to the annotations system - we will only use the link to the config
     this->annots = annotsSet;

@@ -80,9 +80,12 @@ enum cursorShape { AA_CS_round, AA_CS_square };
 // enum BBCornerSelected { _BBEM_TopLeft, _BBEM_Top, _BBEM_TopRight, _BBEM_Right, _BBEM_BottomRight, _BBEM_Bottom, _BBEM_BottomLeft, _BBEM_Left };
 
 enum BBEditionStyle { _BBES_Corner, _BBES_Vertical, _BBES_Horizontal };
+enum CFEditionStyle { _CFES_Centroid, _CFES_Front };
 
 
-const int _AnnotateArea_BBSelection_GlueDist = 5;
+
+
+const int _AnnotateArea_BBSelection_GlueDist = 5;   // let's keep this parameter common for BB and CF edition modes...
 
 
 const unsigned int _AA_CI_NoC = 0;      // no contours color index
@@ -170,6 +173,8 @@ private:
     void updatePaintImages(const QRect& ROI=QRect(-3, -3, 0, 0), bool contoursOnly=false);
 
 
+    QPoint adaptToScaleMul(const QPoint&) const;
+    QPointF adaptToScaleMul(const QPointF&) const;
     QRect adaptToScaleMul(const QRect&) const;
     QPoint adaptToScaleDiv(const QPoint&) const;
 
@@ -177,13 +182,17 @@ private:
     void setWidgetSize(const QSize&);
 
     void drawBoundingBoxes(const QRect& ROI=QRect(-3, -3, 0, 0));
+    void drawArrows(const QRect& ROI=QRect(-3, -3, 0, 0));
 
 
     // bool modified;
-    bool scribbling, rubberMode, BBClassOnly;
+    bool scribbling, rubberMode, BBClassOnly, CFClassOnly;
     // BBCornerSelected BBWhichCornerSelected;
     BBEditionStyle currentBBEditionStyle;
     QRect currentBBEditionFixedRect;
+
+    CFEditionStyle currentCFEditionStyle;
+    QPoint currentCFEditionFixedPoint;
 
     int myPenWidth;
     QColor myPenColor;
@@ -191,7 +200,7 @@ private:
 
     cursorShape myPenShape;
 
-    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ObjectImage, ContoursImage, SPContoursImage;
+    QImage PaintingImage, BackgroundImage, BoundingBoxesImage, ArrowsImage, ObjectImage, ContoursImage, SPContoursImage;
     // QRgb contourNone, contourOn, contourSelected;
     QRect ObjectROI;
 

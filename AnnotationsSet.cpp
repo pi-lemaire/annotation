@@ -66,6 +66,7 @@ AnnotationsConfig::AnnotationsConfig(const AnnotationsConfig& ac)
     this->propsSet = ac.getPropsSet();
     this->imageFileNamingRule = ac.getImageFileNamingRule();
     this->summaryFileNamingRule = ac.getSummaryFileNamingRule();
+    this->csvFileNamingRule = ac.getCsvFileNamingRule();
 }
 
 
@@ -82,6 +83,8 @@ void AnnotationsConfig::setDefaultConfig()
     prop.className = "Utility"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(85, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
     this->addProperty(prop);
     prop.className = "BB Only"; prop.classType = _ACT_BoundingBoxOnly; prop.displayRGBColor=Vec3b(85, 0, 255); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    this->addProperty(prop);
+    prop.className = "CF Only"; prop.classType = _ACT_CentroidFrontOnly; prop.displayRGBColor=Vec3b(170, 85, 170); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
     this->addProperty(prop);
 
     this->imageFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png";
@@ -117,12 +120,24 @@ string AnnotationsConfig::getSummaryFileName(const std::string& origImgPath, con
 }
 
 
+string AnnotationsConfig::getCsvFileName(const std::string& origImgPath, const std::string& origImgFileName) const
+{
+    // there should be no frame number in the summary file name..
+    string ret = this->csvFileNamingRule;
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgPath, origImgPath);
+    AnnotationUtilities::strReplace(ret, _AnnotationsConfig_FileNamingToken_OrigImgFileName, origImgFileName);
+    return ret;
+}
+
+
+
 void AnnotationsConfig::writeContentToYaml(cv::FileStorage& fs) const
 {
     fs << _AnnotsConfig_YAMLKey_Node << "{";
 
     fs << _AnnotsConfig_YAMLKey_ImageFileNamingRule << this->imageFileNamingRule;
     fs << _AnnotsConfig_YAMLKey_SummaryFileNamingRule << this->summaryFileNamingRule;
+    fs << _AnnotsConfig_YAMLKey_CsvFileNamingRule << this->csvFileNamingRule;
 
     fs << _AnnotsConfig_YAMLKey_ClassesDefs_Node << "[";
     for (size_t k=0; k<this->propsSet.size(); k++)
@@ -146,6 +161,8 @@ void AnnotationsConfig::readContentFromYaml(const cv::FileNode& fnd)
 
     currNode[_AnnotsConfig_YAMLKey_ImageFileNamingRule] >> this->imageFileNamingRule;
     currNode[_AnnotsConfig_YAMLKey_SummaryFileNamingRule] >> this->summaryFileNamingRule;
+    if (!currNode[_AnnotsConfig_YAMLKey_CsvFileNamingRule].empty())
+        currNode[_AnnotsConfig_YAMLKey_CsvFileNamingRule] >> this->csvFileNamingRule;
 
     // now reading the properties
     this->propsSet.clear();
@@ -354,6 +371,25 @@ void AnnotationsRecord::updateBoundingBox(int annotationIndex, const cv::Rect2i 
 
     this->record[annotationIndex].BoundingBox = newBB;
 }
+
+
+
+
+void AnnotationsRecord::updateCentroidFront(int annotationIndex, const cv::Point2i newCt, const cv::Point2i newFt)
+{
+    // edit a bounding box given the object ID in the record vector
+
+    // this is the most straightforward thing that we can hope for
+    if (annotationIndex<0 || annotationIndex>=(int)this->record.size())
+        return;
+
+    this->record[annotationIndex].Centroid = newCt;
+    this->record[annotationIndex].Front    = newFt;
+
+    this->updateBoundingBox(annotationIndex, Rect2i(newCt, newFt));
+}
+
+
 
 
 
@@ -871,6 +907,59 @@ int AnnotationsSet::getClosestBBFromPosition(int x, int y, int searchingWindowRa
 
 
 
+int AnnotationsSet::getClosestCFFromPosition(int x, int y, int searchingWindowRadius) const
+{
+    // find the closest Centroid-Front object from the CF Only objects
+
+    const vector<int>& listObjects = this->annotsRecord.getFrameContentIds(this->currentImgIndex);
+    // look for the current frame objects
+
+    int minDist = searchingWindowRadius + 1;
+    int foundId = -1;
+
+    for (size_t k=0; k<listObjects.size(); k++)
+    {
+        if (this->config.getProperty(this->annotsRecord.getAnnotationById(listObjects[k]).ClassId).classType != _ACT_CentroidFrontOnly)
+            // we care only about CF only classes in this situation
+            continue;
+
+        // find the distance between the bounding box and the object
+        const Point2i& currCt = this->annotsRecord.getAnnotationById(listObjects[k]).Centroid;
+        const Point2i& currFt = this->annotsRecord.getAnnotationById(listObjects[k]).Front;
+
+        // min distance to a vertical and a horizontal line
+        int minDistCtX = abs(currCt.x-x);
+        int minDistCtY = abs(currCt.y-y);
+        int minDistFtX = abs(currFt.x-x);
+        int minDistFtY = abs(currFt.y-y);
+
+        if ( ((minDistCtX>searchingWindowRadius) || (minDistCtY>searchingWindowRadius)) // not the Centroid selected
+             && ((minDistFtX>searchingWindowRadius) || (minDistFtY>searchingWindowRadius)) ) // nor the Front...
+            // one of the distances is greater than the searching window radius
+            // and we're well outside of the boundaries of the object - don't go further
+            continue;
+
+        int minDistCt = (minDistCtX<minDistCtY) ? minDistCtX : minDistCtY;
+        int minDistFt = (minDistFtX<minDistFtY) ? minDistFtX : minDistFtY;
+
+        // only keep the smallest amongst them
+        int minDistHandV = (minDistCt < minDistFt) ? minDistCt : minDistFt;
+
+        // found the closest possible object - update
+        if (minDistHandV < minDist)
+        {
+            foundId = listObjects[k];
+            minDist = minDistHandV;
+        }
+    }
+
+    return foundId;
+}
+
+
+
+
+
 
 
 
@@ -1294,12 +1383,20 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName, bool sav
 
     // the place where we're going to save the current frame annotation file
     string savingFileName = forceFileName;
+    string csvSaveFileName;
+
     if (savingFileName.length()<2)
     {
         if (this->isImageOpen())
+        {
             savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->imageFileName);
+            csvSaveFileName = this->config.getCsvFileName(this->imageFilePath, this->imageFileName);
+        }
         else if (this->isVideoOpen())
+        {
             savingFileName = this->config.getSummaryFileName(this->imageFilePath, this->videoFileName);
+            csvSaveFileName = this->config.getCsvFileName(this->imageFilePath, this->videoFileName);
+        }
     }
 
     // verify that we can indeed store the file where we intend to store it
@@ -1328,9 +1425,13 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName, bool sav
     fs << "}";
     fs.release();
 
+    if (csvSaveFileName.length()>2)
+        this->saveToCsv(csvSaveFileName);
+
     // now store the current image
     if (!this->saveCurrentAnnotationImage())
         return false;
+
 
     // specify that we've recorded the changes
     this->changesPerformedUponCurrentAnnot = false;
@@ -1368,6 +1469,10 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
         else if (this->isVideoOpen())
             savingFileName = this->config.getAnnotatedImageFileName(this->imageFilePath, this->videoFileName, this->currentImgIndex);
     }
+
+    if (savingFileName.length()<2)
+        // this means that the absence of a saving file name is intentional - return true
+        return true;
 
     // find out how to associate a class and a color in the finally recorded annotation image
     vector<Point2i> colorsIndexSrc;
@@ -1567,7 +1672,7 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
 
 
     // try to load the image, the color format is mandatory
-    Mat imLoad = imread(loadingFileName, CV_LOAD_IMAGE_COLOR);
+    Mat imLoad = imread(loadingFileName, IMREAD_COLOR );
 
     if (!imLoad.data)
         return false;
@@ -1753,6 +1858,31 @@ void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB
 
 
 
+void AnnotationsSet::editAnnotationCentroidFront(int recordId, const Point2i& newCT, const Point2i& newFT)
+{
+    Point2i compliantCt=newCT, compliantFt=newFT;
+
+    if (compliantCt.x<0) compliantCt.x=0;
+    if (compliantCt.y<0) compliantCt.y=0;
+    if (compliantFt.x<0) compliantFt.x=0;
+    if (compliantFt.y<0) compliantFt.y=0;
+
+    if (compliantCt.x>=this->getCurrentOriginalImg().size().height) compliantCt.x=this->getCurrentOriginalImg().size().height-1;
+    if (compliantCt.y>=this->getCurrentOriginalImg().size().width)  compliantCt.y=this->getCurrentOriginalImg().size().width-1;
+    if (compliantFt.x>=this->getCurrentOriginalImg().size().height) compliantFt.x=this->getCurrentOriginalImg().size().height-1;
+    if (compliantFt.y>=this->getCurrentOriginalImg().size().width)  compliantFt.y=this->getCurrentOriginalImg().size().width-1;
+
+    this->annotsRecord.updateCentroidFront(recordId, compliantCt, compliantFt);
+
+    this->changesPerformedUponCurrentAnnot = true;
+}
+
+
+
+
+
+
+
 void AnnotationsSet::interpolateLastBoundingBoxes(int interpolateRecordLength)
 {
     int startingFrame = this->currentImgIndex-interpolateRecordLength;  // this is the frame on which we start the interpolation
@@ -1816,7 +1946,8 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
         // wrong class number
         return -1;
 
-    if (this->config.getProperty(whichClass).classType != _ACT_BoundingBoxOnly)
+    if ( (this->config.getProperty(whichClass).classType != _ACT_BoundingBoxOnly)
+         && (this->config.getProperty(whichClass).classType != _ACT_CentroidFrontOnly) )
         return -1;
 
     // if this was called, this is necessarily a new annotation
@@ -1824,12 +1955,37 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
 
     // store everything correctly
     AnnotationObject newAnnot;
-    newAnnot.BoundingBox = cv::Rect2i(topLeftCorner, bottomRightCorner);  // we set +1 to the BR corner because this corner is not inclusive
-    newAnnot.BoundingBox &= cv::Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()); // ensuring that the new annotation is well inside the boundaries of the image
 
-    if (newAnnot.BoundingBox.width==0 || newAnnot.BoundingBox.height==0)
-        // it doesn't make sense to record an empty object - we skip it
-        return -1;
+    if (this->config.getProperty(whichClass).classType == _ACT_BoundingBoxOnly)
+    {
+        newAnnot.BoundingBox = cv::Rect2i(topLeftCorner, bottomRightCorner);  // we set +1 to the BR corner because this corner is not inclusive
+        newAnnot.BoundingBox &= cv::Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()); // ensuring that the new annotation is well inside the boundaries of the image
+
+        if (newAnnot.BoundingBox.width==0 || newAnnot.BoundingBox.height==0)
+            // it doesn't make sense to record an empty object - we skip it
+            return -1;
+    }
+    else if (this->config.getProperty(whichClass).classType != _ACT_CentroidFrontOnly)
+    {
+        newAnnot.Centroid = topLeftCorner;
+        newAnnot.Front = bottomRightCorner;
+
+        // correcting the localization so that it stays within the image boundaries
+        if (newAnnot.Centroid.x<0) newAnnot.Centroid.x=0;
+        if (newAnnot.Centroid.y<0) newAnnot.Centroid.y=0;
+        if (newAnnot.Front.x<0) newAnnot.Front.x=0;
+        if (newAnnot.Front.y<0) newAnnot.Front.y=0;
+
+        if (newAnnot.Centroid.x>=this->getCurrentOriginalImg().size().height) newAnnot.Centroid.x=this->getCurrentOriginalImg().size().height-1;
+        if (newAnnot.Centroid.y>=this->getCurrentOriginalImg().size().width)  newAnnot.Centroid.y=this->getCurrentOriginalImg().size().width-1;
+        if (newAnnot.Front.x   >=this->getCurrentOriginalImg().size().height) newAnnot.Front.x   =this->getCurrentOriginalImg().size().height-1;
+        if (newAnnot.Front.y   >=this->getCurrentOriginalImg().size().width)  newAnnot.Front.y   =this->getCurrentOriginalImg().size().width-1;
+
+        // still generating the rectangle, this is quite useful actually...
+        newAnnot.BoundingBox = Rect2i(newAnnot.Centroid, newAnnot.Front);
+    }
+
+
 
     newAnnot.ClassId = whichClass;
     newAnnot.ObjectId = objectId;
@@ -2896,7 +3052,7 @@ void AnnotationsSet::loadAnnotationsImageFile(const std::string& fileName, cv::M
     objIdsMat.release();
 
     // try to load the image, the color format is mandatory
-    Mat imLoad = imread(fileName, CV_LOAD_IMAGE_COLOR);
+    Mat imLoad = imread(fileName, IMREAD_COLOR);
 
     // if it was impossible to load the file, simply quit
     if (!imLoad.data)

@@ -85,7 +85,7 @@ void SuperPixelsAnnotate::buildSPMap()
 
 
         this->SPSegPtr = ximgproc::createSuperpixelSLIC( origImg,
-                                                         ximgproc::SLIC::SLICO,
+                                                         ximgproc::SLICO,
                                                          this->regionSize,
                                                          this->ruler );
 

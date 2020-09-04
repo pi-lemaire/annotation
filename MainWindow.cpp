@@ -91,13 +91,16 @@ MainWindow::MainWindow()
 
 
     // generate the object little window that will handle the class selection
-    this->classSelection = new DialogClassSelection(this->annotations, this, Qt::Tool);
+    this->classSelection = new DialogClassSelection(this->annotations, this);
+    this->classSelection->setWindowFlag(Qt::Tool);
     this->classSelection->show();
     this->classSelection->setWindowTitle(tr("Class Selection"));
     this->classSelection->move(100, 100);
 
     // generate the browser, provide the right pointer
-    this->annotsBrowser = new AnnotationsBrowser(this->annotations, this, Qt::Tool);
+    // this->annotsBrowser = new AnnotationsBrowser(this->annotations, this, Qt::Tool);
+    this->annotsBrowser = new AnnotationsBrowser(this->annotations, this);
+    this->annotsBrowser->setWindowFlag(Qt::Tool);
     this->annotsBrowser->resize(350, 550);
     this->annotsBrowser->show();
     this->annotsBrowser->setWindowTitle(tr("Objects Selection"));
@@ -215,8 +218,8 @@ void MainWindow::openImage()
 {
     if (maybeSave())
     {
-        QString fileName = QFileDialog::getOpenFileName(this,
-                                   tr("Open Image File"), QDir::currentPath());
+        QString fileName = QFileDialog::getOpenFileName( this,
+                                   tr("Open Image File"), (this->annotations->getOpenedFilePath().length()>2 ? QString::fromStdString(this->annotations->getOpenedFilePath()) : QDir::currentPath()) );
         if (!fileName.isEmpty())
         {
             this->annotations->closeFile(false);    // don't save, it's supposed to have been done already
@@ -347,7 +350,8 @@ void MainWindow::resetClassSelection()
 {
     delete this->classSelection;
 
-    this->classSelection = new DialogClassSelection(this->annotations, this, Qt::Tool);
+    this->classSelection = new DialogClassSelection(this->annotations, this);
+    this->classSelection->setWindowFlag(Qt::Tool);
     this->classSelection->show();
     this->classSelection->setWindowTitle(tr("Class Selection"));
     this->classSelection->move(100, 100);

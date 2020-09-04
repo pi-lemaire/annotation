@@ -2,7 +2,8 @@
 
 
 
-AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* parent, Qt::WindowFlags flags): QWidget( parent, flags )
+// AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* parent, Qt::WindowFlags flags): QWidget( parent, flags )
+AnnotationsBrowser::AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget* parent): QWidget( parent )
 {
     // storing the pointer to the annotations system - we will only use the link to the config
     this->annots = annotsSet;

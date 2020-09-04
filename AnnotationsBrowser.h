@@ -31,7 +31,8 @@ class AnnotationsBrowser : public QWidget
     Q_OBJECT
 
 public:
-    AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget *parent=0, Qt::WindowFlags f=0);
+    // AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget *parent=0, Qt::WindowFlags f=NULL);
+    AnnotationsBrowser(AnnotationsSet* annotsSet, QWidget *parent=0);
     ~AnnotationsBrowser();
 
 

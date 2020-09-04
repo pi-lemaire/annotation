@@ -18,7 +18,8 @@ class DialogClassSelection : public QDialog
     Q_OBJECT
 
 public:
-    DialogClassSelection(AnnotationsSet* annotsSet, QWidget *parent=0, Qt::WindowFlags f = 0);
+    // DialogClassSelection(AnnotationsSet* annotsSet, QWidget *parent=0, Qt::WindowFlags f = 0);
+    DialogClassSelection(AnnotationsSet* annotsSet, QWidget *parent=0);
     ~DialogClassSelection();
 
 

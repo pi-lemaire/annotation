@@ -102,8 +102,8 @@ void OptFlowTracking::trackAnnotations()
     Mat prevImg, currImg;
 
     // allright, now we can process the images on which we're going to perform the dense optical flow algorithm
-    cvtColor(Mat(this->originAnnots->getOriginalImg(this->originAnnots->getCurrentFramePosition()-1), workingArea), prevImg, CV_BGR2GRAY);
-    cvtColor(Mat(this->originAnnots->getCurrentOriginalImg(), workingArea), currImg, CV_BGR2GRAY);
+    cvtColor(Mat(this->originAnnots->getOriginalImg(this->originAnnots->getCurrentFramePosition()-1), workingArea), prevImg, COLOR_BGR2GRAY);
+    cvtColor(Mat(this->originAnnots->getCurrentOriginalImg(), workingArea), currImg, COLOR_BGR2GRAY);
 
     resize(prevImg, prevImg, Size2i(prevImg.size().width*this->scaleDownFactor, prevImg.size().height*this->scaleDownFactor));
     resize(currImg, currImg, Size2i(prevImg.size().width*this->scaleDownFactor, prevImg.size().height*this->scaleDownFactor));
@@ -144,7 +144,11 @@ void OptFlowTracking::trackAnnotations()
 
 
 
-        bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
+
+        bool BBClassOnly = this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType==_ACT_BoundingBoxOnly;
+        bool FCClassOnly = this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType==_ACT_CentroidFrontOnly;
+
+        bool FeaturePointsClassOnly = BBClassOnly || FCClassOnly;
 
         Rect2i BBTracked;
 
@@ -190,10 +194,10 @@ void OptFlowTracking::trackAnnotations()
 
 
             // what we will actually do will depend greatly on whether we're in the case of a BB only class or not
-            bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
+            // bool BBClassOnly = (this->originAnnots->getConfig().getProperty(prevAnnot.ClassId).classType == _ACT_BoundingBoxOnly);
 
 
-            if (!BBClassOnly)
+            if (!FeaturePointsClassOnly)
             {
                 // case pixel level : find the displacement of every pixel, find the affine transform indicated by the optical flow vector
                 vector<Point2f> originPoints, destPoints;
@@ -233,7 +237,7 @@ void OptFlowTracking::trackAnnotations()
                 warpAffine(origAnnotMask, newAnnotationMask, transform, origAnnotMask.size());
 
                 // threshold it so that we stay in pixel level domain
-                threshold(newAnnotationMask, newAnnotationMask, 127, 255, CV_THRESH_BINARY);
+                threshold(newAnnotationMask, newAnnotationMask, 127, 255, THRESH_BINARY);
             }
             else
             {
@@ -242,28 +246,43 @@ void OptFlowTracking::trackAnnotations()
 
                 std::vector<float> displacementX, displacementY;
 
-                /*
-                const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
-                const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
-                */
 
-                for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
+                if (BBClassOnly)
                 {
-                    for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
+                    /*
+                    const Mat& prevClassMat = this->originAnnots->getAnnotationsClasses(prevAnnot.FrameNumber);
+                    const Mat& prevObjIdMat = this->originAnnots->getAnnotationsIds(prevAnnot.FrameNumber);
+                    */
+
+                    for (int i=prevAnnot.BoundingBox.tl().y; i<prevAnnot.BoundingBox.br().y; i++)
                     {
-                        displacementX.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0]);
-                        displacementY.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1]);
+                        for (int j=prevAnnot.BoundingBox.tl().x; j<prevAnnot.BoundingBox.br().x; j++)
+                        {
+                            displacementX.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[0]);
+                            displacementY.push_back(flowMat.at<Vec2f>(i-workingArea.tl().y, j-workingArea.tl().x)[1]);
+                        }
                     }
+
+                    sort(displacementX.begin(), displacementX.end());
+                    sort(displacementY.begin(), displacementY.end());
+                    int actualDisplacementX = round(displacementX[(int)displacementX.size()/2]);
+                    int actualDisplacementY = round(displacementY[(int)displacementY.size()/2]);
+
+                    BBTracked = prevAnnot.BoundingBox;
+                    BBTracked.x += actualDisplacementX;
+                    BBTracked.y += actualDisplacementY;
+                }
+                else if (FCClassOnly)
+                {
+                    Point2i newCentroid, newFront;
+                    newCentroid.x = round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[0]);
+                    newCentroid.y = round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[1]);
+                    newFront.x = round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[0]);
+                    newFront.y = round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[1]);
                 }
 
-                sort(displacementX.begin(), displacementX.end());
-                sort(displacementY.begin(), displacementY.end());
-                int actualDisplacementX = round(displacementX[(int)displacementX.size()/2]);
-                int actualDisplacementY = round(displacementY[(int)displacementY.size()/2]);
 
-                BBTracked = prevAnnot.BoundingBox;
-                BBTracked.x += actualDisplacementX;
-                BBTracked.y += actualDisplacementY;
+
             }
 
         }
@@ -271,7 +290,7 @@ void OptFlowTracking::trackAnnotations()
         // finally add the new annotation
         if (BBClassOnly)
             this->originAnnots->addAnnotation(BBTracked.tl(), BBTracked.br(), prevAnnot.ClassId, prevAnnot.ObjectId);
-        else
+        else if (!FCClassOnly)
             this->originAnnots->addAnnotation(newAnnotationMask, newBB.tl(), prevAnnot.ClassId, Point2i(-1,-1), prevAnnot.ObjectId);
     }
 }

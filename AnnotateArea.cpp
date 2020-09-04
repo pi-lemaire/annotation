@@ -282,6 +282,8 @@ void AnnotateArea::setWidgetSize(const QSize& newSize)
     this->setFixedSize(newSize);
     this->BoundingBoxesImage = QImage(newSize, QImage::Format_ARGB32);
     this->BoundingBoxesImage.fill(qRgba(255, 255, 255, 0));
+    this->ArrowsImage = QImage(newSize, QImage::Format_ARGB32);
+    this->ArrowsImage.fill(qRgba(255, 255, 255, 0));
 }
 
 
@@ -442,6 +444,8 @@ void AnnotateArea::selectClassId(int classId)
     this->myPenColor = QtCvUtils::cvVec3bToQColor( this->annotations->getConfig().getProperty(classId).displayRGBColor );
 
     this->BBClassOnly = (this->annotations->getConfig().getProperty(classId).classType == _ACT_BoundingBoxOnly);
+
+    this->CFClassOnly = (this->annotations->getConfig().getProperty(classId).classType == _ACT_CentroidFrontOnly);
 
     this->updateStatusBar();
 }
@@ -623,7 +627,7 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        if (!this->BBClassOnly)
+        if (!this->BBClassOnly && !this->CFClassOnly)
         {
             // the user starts drawing something with his left button.. store the position and record the status
             this->lastPoint = this->adaptToScaleDiv(event->pos());
@@ -654,7 +658,7 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
             // start recording the right ROI
             this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
         }
-        else
+        else if (this->BBClassOnly)
         {
             QPoint actualInImgPos = this->adaptToScaleDiv(event->pos());
 
@@ -748,6 +752,66 @@ void AnnotateArea::mousePressEvent(QMouseEvent *event)
                 this->update( (prevObjectROI | this->ObjectROI).adjusted(-2,-2,2,2) );
             }
         }
+        else if (this->CFClassOnly)
+        {
+            QPoint actualInImgPos = this->adaptToScaleDiv(event->pos());
+
+            // 2 cases (actually, just one but slightly different) : new annotation or edition
+            int selectedAnnot = this->annotations->getClosestCFFromPosition(actualInImgPos.x(), actualInImgPos.y(), (int)(ceil((float)_AnnotateArea_BBSelection_GlueDist / this->scaleFactor)));
+
+            if (selectedAnnot != -1)
+            {
+                // we're in edition mode - find which one : TL, T, TR, R..., L?
+
+                const cv::Point2i& currCentroid = this->annotations->getRecord().getAnnotationById(selectedAnnot).Centroid;
+                const cv::Point2i& currFront    = this->annotations->getRecord().getAnnotationById(selectedAnnot).Front;
+
+                int distToCentroidY = abs(currCentroid.y - actualInImgPos.y());
+                int distToCentroidX = abs(currCentroid.x - actualInImgPos.x());
+                int distToFrontY    = abs(currFront.y    - actualInImgPos.y());
+                int distToFrontX    = abs(currFront.x    - actualInImgPos.x());
+
+                int distToCentroid = (distToCentroidY < distToCentroidX) ? distToCentroidY : distToCentroidX;
+                int distToFront    = (distToFrontY    < distToFrontX   ) ? distToFrontY    : distToFrontX;
+
+                // we must be under the selection area + in case both are under this area, we select the closer with some preference over the TL corner
+                bool centroidActive = (distToCentroid<=_AnnotateArea_BBSelection_GlueDist && distToCentroid<=distToFront);
+                bool frontActive    = (distToFront   <=_AnnotateArea_BBSelection_GlueDist && distToCentroid> distToFront);
+
+                // simply fill the right position... it might have been possible to encode this kind of information but I'm a bit lazy there
+                if (centroidActive)
+                {
+                    // top left corner selected
+                    this->currentCFEditionStyle = _CFES_Centroid;
+                    this->currentCFEditionFixedPoint = QPoint(currFront.x, currFront.y);
+                }
+                else if (frontActive)
+                {
+                    // top side selected
+                    this->currentCFEditionStyle = _CFES_Front;
+                    this->currentCFEditionFixedPoint = QPoint(currCentroid.x, currCentroid.y);
+                }
+
+                this->selectedObjectId = selectedAnnot;
+
+                this->ObjectROI = QRect(this->firstAnnotPoint, this->firstAnnotPoint);
+            }
+            else
+            {
+                // generate a new object
+                this->selectedObjectId = this->annotations->addAnnotation( cv::Point2i(actualInImgPos.x(), actualInImgPos.y()),
+                                                                           cv::Point2i(actualInImgPos.x(), actualInImgPos.y()), this->selectedClass );
+
+                // by default, work in Center->Front edition mode - which means that we have set the center, and we're going to annotate the front
+                this->currentCFEditionStyle = _CFES_Front;
+                this->currentCFEditionFixedPoint = QPoint(actualInImgPos);
+
+                QRect prevObjectROI = this->ObjectROI;
+                this->ObjectROI = QRect(event->pos(), event->pos());
+
+                this->update( (prevObjectROI | this->ObjectROI).adjusted(-2,-2,2,2) );
+            }
+        }
     }
 }
 
@@ -792,6 +856,33 @@ void AnnotateArea::mouseMoveEvent(QMouseEvent *event)
         this->annotations->editAnnotationBoundingBox( this->selectedObjectId, cv::Rect2i(cv::Point2i(newArea.left(), newArea.top()),
                                                                                          cv::Point2i(newArea.right(), newArea.bottom())) );
 
+
+        QRect prevObjectROI = this->ObjectROI;
+        this->ObjectROI = this->adaptToScaleMul(newArea);
+
+        this->update( (prevObjectROI | this->ObjectROI).adjusted(-2,-2,2,2) );
+    }
+    else if ((event->buttons() & Qt::LeftButton) && this->CFClassOnly)
+    {
+        // alright, we must edit the currently selected bounding box
+
+        QPoint actualInImgPos = this->adaptToScaleDiv(event->pos());
+
+        QRect currPointRect = QRect(actualInImgPos, QSize(1,1));;
+
+        switch(this->currentCFEditionStyle)
+        {
+        case _CFES_Centroid:
+            this->annotations->editAnnotationCentroidFront( this->selectedObjectId, cv::Point2i(actualInImgPos.x(), actualInImgPos.y()), cv::Point2i(this->currentCFEditionFixedPoint.x(), this->currentCFEditionFixedPoint.y()));
+            // currPointRect = QRect(actualInImgPos, QSize(1,1));
+            break;
+        case _CFES_Front:
+            this->annotations->editAnnotationCentroidFront( this->selectedObjectId, cv::Point2i(this->currentCFEditionFixedPoint.x(), this->currentCFEditionFixedPoint.y()), cv::Point2i(actualInImgPos.x(), actualInImgPos.y()));
+            // currPointRect = QRect(actualInImgPos.x(), this->currentBBEditionFixedRect.top(), 1, 1);
+            break;
+        }
+
+        QRect newArea = QRect(this->currentCFEditionFixedPoint, QSize(1,1)) | currPointRect;
 
         QRect prevObjectROI = this->ObjectROI;
         this->ObjectROI = this->adaptToScaleMul(newArea);
@@ -875,7 +966,7 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         // update the corresponding image content
         this->update( this->adaptToScaleMul(this->ObjectROI.adjusted(-2, -2, 2, 2)) );
     }
-    else if (event->button() == Qt::LeftButton && this->BBClassOnly)
+    else if (event->button() == Qt::LeftButton && (this->BBClassOnly || this->CFClassOnly))
     {
         // update the whole image, we may have messed-up with the objects numbering display
         this->update();
@@ -893,6 +984,8 @@ void AnnotateArea::mouseReleaseEvent(QMouseEvent *event)
         // find the right annotation at the place where we clicked
         if (this->BBClassOnly)
             this->selectedObjectId = this->annotations->getClosestBBFromPosition( actualPos.x(), actualPos.y(), (int)(ceil((float)_AnnotateArea_BBSelection_GlueDist / this->scaleFactor)) );
+        else if (this->CFClassOnly)
+            this->selectedObjectId = this->annotations->getClosestCFFromPosition( actualPos.x(), actualPos.y(), (int)(ceil((float)_AnnotateArea_BBSelection_GlueDist / this->scaleFactor)) );
         else
             this->selectedObjectId = this->annotations->getObjectIdAtPosition(actualPos.x(), actualPos.y());
 
@@ -992,9 +1085,10 @@ void AnnotateArea::paintEvent(QPaintEvent *event)
              */
     // now displaying the bounding boxes - only if we're not in scribble mode
     this->drawBoundingBoxes(dirtyRect);
+    this->drawArrows(dirtyRect);
     painter.setOpacity(0.9);
     painter.drawImage(dirtyRect.topLeft(), this->BoundingBoxesImage.copy(dirtyRect));
-
+    painter.drawImage(dirtyRect.topLeft(), this->ArrowsImage.copy(dirtyRect));
 
     /*
     // display the selected object
@@ -1105,6 +1199,9 @@ void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
 
     for (size_t k=0; k<currFrameObjects.size(); k++)
     {
+        if (this->annotations->getConfig().getProperty(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ClassId).classType == _ACT_CentroidFrontOnly)
+            continue;
+
         QRect currBB = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).BoundingBox);
 
         if (origImgRect.intersects(currBB))
@@ -1163,6 +1260,151 @@ void AnnotateArea::drawBoundingBoxes(const QRect& ROI)
 
     painter.end();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void AnnotateArea::drawArrows(const QRect& ROI)
+{
+    // avoid some annoying warnings
+    if (this->ArrowsImage.size()==QSize(0,0))
+        return;
+
+
+    // taking account of lines width to create a local ROI
+    int adj = 2;
+    if (this->scaleFactor>1.)
+        adj *= this->scaleFactor;
+
+    QRect localROI = ROI.adjusted(-adj, -adj, adj, adj);
+
+    // defining the original area covered by the paint event, so that we can avoid re-drawing objects that are out of scope
+    QRect origImgRect = QRect(localROI.topLeft()/this->scaleFactor, localROI.size()/this->scaleFactor);
+
+
+    // initiating the QPainter
+    QPainter painter(&(this->ArrowsImage));
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);    // ensure that filling with transparent data will indeed fill with transparent
+
+    // erase what's inside the ROI
+    painter.fillRect(localROI, Qt::transparent);
+
+    // now ensure that what we're painting now will add something
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+
+    painter.setRenderHint(QPainter::Antialiasing);
+
+
+    // setting the font
+    QFont numberFont("Helvetica [Cronyx]", 16, QFont::Bold);
+    numberFont.setStyleStrategy(QFont::PreferAntialias);
+    QPen textOutline;
+    textOutline.setWidth(1);
+    //textOutline.setColor(Qt::white);
+
+
+
+
+
+    // now displaying the bounding boxes
+    const std::vector<int>& currFrameObjects = this->annotations->getObjectsListOnCurrentFrame();
+
+    for (size_t k=0; k<currFrameObjects.size(); k++)
+    {
+        if (this->annotations->getConfig().getProperty(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ClassId).classType != _ACT_CentroidFrontOnly)
+            continue;
+
+        QRect currBB = QtCvUtils::cvRect2iToQRect(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).BoundingBox);
+        QPoint currCenter(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).Centroid.x, this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).Centroid.y);
+        QPoint currArrowHead(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).Front.x, this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).Front.y);
+
+        if (origImgRect.intersects(currBB))
+        {
+            int currClass = this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ClassId;
+
+            QColor rightColor = QtCvUtils::cvVec3bToQColor(this->annotations->getConfig().getProperty(currClass).displayRGBColor, 255);
+            // setting the right color
+            // we divide the color by 2 (darken it) so that it contrasts better
+
+            if (currFrameObjects[k] == this->selectedObjectId)
+            {
+                painter.setPen(QPen(rightColor, 2, Qt::SolidLine));
+                painter.setOpacity(1.);
+            }
+            else
+            {
+                painter.setPen(QPen(rightColor, 1, Qt::SolidLine));
+                painter.setOpacity(0.8);
+            }
+
+            // painter.drawRect(this->adaptToScaleMul(currBB));
+            painter.drawLine(this->adaptToScaleMul(currCenter), this->adaptToScaleMul(currArrowHead));
+
+
+            double angle = std::atan2( -(currCenter.y()-currArrowHead.y()), (currCenter.x()-currArrowHead.x()) );
+            double arrowSize = 7;
+
+            QPointF arrowP1 = currArrowHead + QPointF(sin(angle + M_PI / 3) * arrowSize,
+                                            cos(angle + M_PI / 3) * arrowSize);
+            QPointF arrowP2 = currArrowHead + QPointF(sin(angle + M_PI - M_PI / 3) * arrowSize,
+                                                cos(angle + M_PI - M_PI / 3) * arrowSize);
+
+            QPolygonF arrowHead;
+            arrowHead.clear();
+            arrowHead << this->adaptToScaleMul(currArrowHead) << this->adaptToScaleMul(arrowP1) << this->adaptToScaleMul(arrowP2);
+
+            painter.drawPolygon(arrowHead);
+
+
+
+            // now handling the text (if needed)
+            if (this->annotations->getConfig().getProperty(currClass).classType != _ACT_Uniform)
+            {
+                // for drawing the objects numbering, we use a textPath object
+                // this allows to draw the outline and the inside of characters with a different color
+                QPainterPath textPath;
+                textOutline.setColor(qRgb(rightColor.red()/2, rightColor.green()/2, rightColor.blue()/2));  // darken the color to increase the contrast!
+                painter.setPen(textOutline);
+
+                // try to set the text inside the bounding box
+                QPoint textPos = this->adaptToScaleMul(currCenter);
+                textPos.setY(textPos.y() + 13);
+
+                textPath.addText(textPos, numberFont, QString::number(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ObjectId));
+                painter.setBrush(Qt::white);    // filling the characters with white
+                painter.drawPath(textPath);
+                painter.setBrush(Qt::transparent);  // don't forget to remove the filling
+
+
+                // we draw the text then
+                /*
+                painter.drawText(this->adaptToScaleMul(currBB),
+                                 QString::number(this->annotations->getRecord().getAnnotationById(currFrameObjects[k]).ObjectId),
+                                 Qt::AlignBottom | Qt::AlignRight);
+                                 */
+
+                //painter.setPen(QPen());
+            }
+        }
+    }
+
+    painter.end();
+}
+
+
+
+
 
 
 
@@ -1368,6 +1610,40 @@ QRect AnnotateArea::adaptToScaleMul(const QRect& rect) const
 
     return QRect(rect.topLeft()*this->scaleFactor, rect.size()*this->scaleFactor);
 }
+
+QPoint AnnotateArea::adaptToScaleMul(const QPoint& pt) const
+{
+    // a small notice about this function
+    // at first, I had
+
+    if (this->scaleFactor>1.)
+    {
+        // if we're in "zoom" mode, we need to switch to integers. Rounding tends to cause problems
+        int iScaleFactor = round(this->scaleFactor);
+        return QPoint(pt*iScaleFactor);
+    }
+
+    return QPoint(pt*this->scaleFactor);
+}
+
+
+QPointF AnnotateArea::adaptToScaleMul(const QPointF& pt) const
+{
+    // a small notice about this function
+    // at first, I had
+
+    if (this->scaleFactor>1.)
+    {
+        // if we're in "zoom" mode, we need to switch to integers. Rounding tends to cause problems
+        double iScaleFactor = round(this->scaleFactor);
+        return QPointF(pt*iScaleFactor);
+    }
+
+    return QPointF(pt*this->scaleFactor);
+}
+
+
+
 
 
 QPoint AnnotateArea::adaptToScaleDiv(const QPoint& point) const

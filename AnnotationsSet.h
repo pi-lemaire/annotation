@@ -10,7 +10,7 @@
 
 #include <algorithm>
 #include <numeric>
-
+#include <fstream>
 
 
 /*
@@ -71,7 +71,7 @@ namespace AnnotationUtilities
 
 
 
-enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects, _ACT_BoundingBoxOnly };
+enum AnnotationClassType { _ACT_Uniform, _ACT_MultipleObjects, _ACT_BoundingBoxOnly, _ACT_CentroidFrontOnly };
 
 
 
@@ -162,6 +162,7 @@ const std::string _AnnotsConfig_YAMLKey_Node  = "Configuration";
 const std::string _AnnotsConfig_YAMLKey_ClassesDefs_Node  = "ClassesDefinitions";
 const std::string _AnnotsConfig_YAMLKey_ImageFileNamingRule  = "ImageFilesNamingRule";
 const std::string _AnnotsConfig_YAMLKey_SummaryFileNamingRule  = "SummaryFileNamingRule";
+const std::string _AnnotsConfig_YAMLKey_CsvFileNamingRule  = "CsvFileNamingRule";
 
 
 class AnnotationsConfig
@@ -184,9 +185,12 @@ public:
     const std::string& getImageFileNamingRule() const { return this->imageFileNamingRule; }
     void setSummaryFileNamingRule(const std::string& rule) { this->summaryFileNamingRule = rule; }
     const std::string& getSummaryFileNamingRule() const { return this->summaryFileNamingRule; }
+    void setCsvFileNamingRule(const std::string& rule) { this->csvFileNamingRule = rule; }
+    const std::string& getCsvFileNamingRule() const { return this->csvFileNamingRule; }
 
     std::string getAnnotatedImageFileName(const std::string& origImgPath, const std::string& origImgFileName, int frameNumber) const;
     std::string getSummaryFileName(const std::string& origImgPath, const std::string& origiImgFileName) const;
+    std::string getCsvFileName(const std::string& origImgPath, const std::string& origiImgFileName) const;
 
 
     // default config stuff
@@ -206,6 +210,7 @@ private:
 
     std::string imageFileNamingRule;
     std::string summaryFileNamingRule;
+    std::string csvFileNamingRule;
 };
 
 
@@ -225,6 +230,8 @@ const std::string _AnnotObj_YAMLKey_Class = "Cl";
 const std::string _AnnotObj_YAMLKey_ObjId = "Ob";
 const std::string _AnnotObj_YAMLKey_Frame = "Fr";
 const std::string _AnnotObj_YAMLKey_BBox  = "BB";
+const std::string _AnnotObj_YAMLKey_Cntrd = "Ct";
+const std::string _AnnotObj_YAMLKey_Front = "Ft";
 
 
 
@@ -232,15 +239,17 @@ class AnnotationObject
 {
 public:
     AnnotationObject() : ClassId(0), ObjectId(0), FrameNumber(0), locked(false) {}
-    AnnotationObject(const AnnotationObject& ao) : ClassId(ao.ClassId), ObjectId(ao.ObjectId), FrameNumber(ao.FrameNumber), BoundingBox(ao.BoundingBox), locked(ao.locked) {}
-    AnnotationObject& operator=(const AnnotationObject& ao) { this->ClassId=ao.ClassId; this->ObjectId=ao.ObjectId; this->FrameNumber=ao.FrameNumber; this->BoundingBox=ao.BoundingBox; this->locked=ao.locked; return *(this); }
+    AnnotationObject(const AnnotationObject& ao) : ClassId(ao.ClassId), ObjectId(ao.ObjectId), FrameNumber(ao.FrameNumber), BoundingBox(ao.BoundingBox), Centroid(ao.Centroid), Front(ao.Front), locked(ao.locked) {}
+    AnnotationObject& operator=(const AnnotationObject& ao) { this->ClassId=ao.ClassId; this->ObjectId=ao.ObjectId; this->FrameNumber=ao.FrameNumber; this->BoundingBox=ao.BoundingBox; this->Centroid=ao.Centroid; this->Front=ao.Front; this->locked=ao.locked; return *(this); }
 
     void write(cv::FileStorage& fs) const
     {
         fs << "{:" << _AnnotObj_YAMLKey_Class << this->ClassId
                    << _AnnotObj_YAMLKey_ObjId << this->ObjectId
                    << _AnnotObj_YAMLKey_Frame << this->FrameNumber
-                   << _AnnotObj_YAMLKey_BBox  << this->BoundingBox << "}";
+                   << _AnnotObj_YAMLKey_BBox  << this->BoundingBox
+                   << _AnnotObj_YAMLKey_Cntrd << this->Centroid
+                   << _AnnotObj_YAMLKey_Front << this->Front<< "}";
     }
 
     void writeToCsv(std::ostream& fs) const
@@ -251,7 +260,11 @@ public:
            << this->BoundingBox.x << _annotObj_Csv_FieldSeparator
            << this->BoundingBox.y << _annotObj_Csv_FieldSeparator
            << this->BoundingBox.width << _annotObj_Csv_FieldSeparator
-           << this->BoundingBox.height << std::endl;
+           << this->BoundingBox.height << _annotObj_Csv_FieldSeparator
+           << this->Centroid.x << _annotObj_Csv_FieldSeparator
+           << this->Centroid.y << _annotObj_Csv_FieldSeparator
+           << this->Front.x << _annotObj_Csv_FieldSeparator
+           << this->Front.y <<  std::endl;
     }
 
     static void writeCsvHeader(std::ostream& fs)
@@ -262,7 +275,11 @@ public:
            << "BB_x" << _annotObj_Csv_FieldSeparator
            << "BB_y" << _annotObj_Csv_FieldSeparator
            << "BB_width" << _annotObj_Csv_FieldSeparator
-           << "BB_height" << std::endl;
+           << "BB_height" << _annotObj_Csv_FieldSeparator
+           << "Ct_x" << _annotObj_Csv_FieldSeparator
+           << "Ct_y" << _annotObj_Csv_FieldSeparator
+           << "Ft_x" << _annotObj_Csv_FieldSeparator
+           << "Ft_y" << std::endl;
     }
 
     void read(const cv::FileNode& node)
@@ -271,12 +288,15 @@ public:
         node[_AnnotObj_YAMLKey_ObjId] >> this->ObjectId;
         node[_AnnotObj_YAMLKey_Frame] >> this->FrameNumber;
         node[_AnnotObj_YAMLKey_BBox]  >> this->BoundingBox;
+        node[_AnnotObj_YAMLKey_Cntrd] >> this->Centroid;
+        node[_AnnotObj_YAMLKey_Front] >> this->Front;
     }
 
     int ClassId;
     int ObjectId;
     int FrameNumber;
     cv::Rect2i BoundingBox;
+    cv::Point2i Centroid, Front;
     bool locked;
 };
 
@@ -321,6 +341,7 @@ public:
 
     int addNewAnnotation(const AnnotationObject&);                          // push a new annotation object, at the end of the main vector (return its index)
     void updateBoundingBox(int annotationIndex, const cv::Rect2i newBB);    // edit a bounding box given the object ID in the record vector
+    void updateCentroidFront(int annotationIndex, const cv::Point2i newCt, const cv::Point2i newFt);    // edit a bounding box given the object ID in the record vector
     void removeAnnotation(int annotationIndex);                             // remove an annotation given its id in the record vector
     void clearFrame(int frameId);                                           // remove all of the objects included in a given frame
 
@@ -408,7 +429,7 @@ public:
     // get the object Id (within the record) to which the pixel (x,y) belongs in the current image
     int getObjectIdAtPosition(int x, int y) const;
     int getClosestBBFromPosition(int x, int y, int searchingWindowRadius) const;
-
+    int getClosestCFFromPosition(int x, int y, int searchingWindowRadius) const;
 
 
     const std::vector<int>& getObjectsListOnCurrentFrame() const { return this->annotsRecord.getFrameContentIds(this->currentImgIndex); }
@@ -469,11 +490,15 @@ public:
 
 
     const std::string& getOpenedFileName() const { return (this->isVideoOpen() ? this->videoFileName : this->imageFileName); }
+    const std::string& getOpenedFilePath() const { return this->imageFilePath; }
 
 
 
     void editAnnotationBoundingBox(int recordId, const cv::Rect2i& newBB);
             // just a mean of editing a bounding box - also verifies that the object exists
+
+    void editAnnotationCentroidFront(int recordId, const cv::Point2i& newCentroid, const cv::Point2i& newFront);
+            // just a mean of editing a CF object - also verifies that the object exists
 
     void interpolateLastBoundingBoxes(int interpolateRecordLength);
             // interpolate the bounding boxes of BB only objects between the N and and N-interpolateRecordLength frames
