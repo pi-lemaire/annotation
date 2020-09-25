@@ -274,11 +274,13 @@ void OptFlowTracking::trackAnnotations()
                 }
                 else if (FCClassOnly)
                 {
-                    Point2i newCentroid, newFront;
-                    newCentroid.x = round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[0]);
-                    newCentroid.y = round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[1]);
-                    newFront.x = round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[0]);
-                    newFront.y = round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[1]);
+                    Point2i newCentroid=prevAnnot.Centroid, newFront=prevAnnot.Front;
+                    newCentroid.x += round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[0]);
+                    newCentroid.y += round(flowMat.at<Vec2f>(prevAnnot.Centroid.y-workingArea.tl().y, prevAnnot.Centroid.x-workingArea.tl().x)[1]);
+                    newFront.x += round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[0]);
+                    newFront.y += round(flowMat.at<Vec2f>(prevAnnot.Front.y-workingArea.tl().y, prevAnnot.Front.x-workingArea.tl().x)[1]);
+
+                    this->originAnnots->addAnnotation(newCentroid, newFront, prevAnnot.ClassId, prevAnnot.ObjectId);
                 }
 
 

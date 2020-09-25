@@ -1,0 +1,13 @@
+%YAML:1.0
+---
+AnnotationsSet:
+   Configuration:
+      ImageFilesNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/%FrNu%.png"
+      SummaryFileNamingRule: "%OrImPa%annotations/%OrImFiNa%_annots/summary.yaml"
+      ClassesDefinitions:
+         - { Name:Road, Type:0, DispColRGB:[ 0, 0, 255 ],
+             IdRecRangeMinBGR:[ 127, 127, 0 ], IdRecRangeMaxBGR:[ 0, 0,
+             0 ] }
+         - { Name:Vehicle, Type:0, DispColRGB:[ 255, 0, 0 ],
+             IdRecRangeMinBGR:[ 0, 0, 127 ], IdRecRangeMaxBGR:[ 255, 255,
+             255 ] }

@@ -74,6 +74,7 @@ void AnnotationsConfig::setDefaultConfig()
 {
     // filling some basic configuration stuff
     AnnotationsProperties prop;
+    /*
     prop.className = "Road"; prop.classType = _ACT_Uniform; prop.displayRGBColor=Vec3b(0, 85, 85); prop.minIdBGRRecRange=Vec3b(127, 127, 0);
     this->addProperty(prop);
     prop.className = "Car"; prop.classType = _ACT_MultipleObjects; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 127); prop.maxIdBGRRecRange=Vec3b(255, 255, 255);
@@ -84,11 +85,17 @@ void AnnotationsConfig::setDefaultConfig()
     this->addProperty(prop);
     prop.className = "BB Only"; prop.classType = _ACT_BoundingBoxOnly; prop.displayRGBColor=Vec3b(85, 0, 255); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
     this->addProperty(prop);
-    prop.className = "CF Only"; prop.classType = _ACT_CentroidFrontOnly; prop.displayRGBColor=Vec3b(170, 85, 170); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    */
+    prop.className = "Car CF"; prop.classType = _ACT_CentroidFrontOnly; prop.displayRGBColor=Vec3b(255, 0, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    this->addProperty(prop);
+    prop.className = "Truck CF"; prop.classType = _ACT_CentroidFrontOnly; prop.displayRGBColor=Vec3b(0, 127, 0); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
+    this->addProperty(prop);
+    prop.className = "Utility CF"; prop.classType = _ACT_CentroidFrontOnly; prop.displayRGBColor=Vec3b(0, 0, 255); prop.minIdBGRRecRange=Vec3b(0, 0, 0); prop.maxIdBGRRecRange=Vec3b(255, 255, 0);
     this->addProperty(prop);
 
-    this->imageFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png";
-    this->summaryFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/summary.yaml";
+    this->imageFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + "annotations/" + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations/" + _AnnotationsConfig_FileNamingToken_FrameNumber + ".png";
+    this->summaryFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + "annotations/" + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations.yaml";
+    this->csvFileNamingRule = _AnnotationsConfig_FileNamingToken_OrigImgPath + "annotations/" + _AnnotationsConfig_FileNamingToken_OrigImgFileName + "_annotations.csv";
 }
 
 
@@ -1493,7 +1500,8 @@ bool AnnotationsSet::saveCurrentAnnotationImage(const std::string& forcedFileNam
 
 
         // don't bother with this part if the class is Bounding Boxes Only
-        if (this->config.getProperty(currentAnnotCaracs.ClassId).classType == _ACT_BoundingBoxOnly)
+        if ( (this->config.getProperty(currentAnnotCaracs.ClassId).classType == _ACT_BoundingBoxOnly) ||
+             (this->config.getProperty(currentAnnotCaracs.ClassId).classType == _ACT_CentroidFrontOnly) )
             continue;
 
         emptyImage = false;
@@ -1867,10 +1875,16 @@ void AnnotationsSet::editAnnotationCentroidFront(int recordId, const Point2i& ne
     if (compliantFt.x<0) compliantFt.x=0;
     if (compliantFt.y<0) compliantFt.y=0;
 
+    /*
     if (compliantCt.x>=this->getCurrentOriginalImg().size().height) compliantCt.x=this->getCurrentOriginalImg().size().height-1;
     if (compliantCt.y>=this->getCurrentOriginalImg().size().width)  compliantCt.y=this->getCurrentOriginalImg().size().width-1;
     if (compliantFt.x>=this->getCurrentOriginalImg().size().height) compliantFt.x=this->getCurrentOriginalImg().size().height-1;
     if (compliantFt.y>=this->getCurrentOriginalImg().size().width)  compliantFt.y=this->getCurrentOriginalImg().size().width-1;
+    */
+    if (compliantCt.x>=this->getCurrentOriginalImg().size().width) compliantCt.x=this->getCurrentOriginalImg().size().width-1;
+    if (compliantCt.y>=this->getCurrentOriginalImg().size().height)  compliantCt.y=this->getCurrentOriginalImg().size().height-1;
+    if (compliantFt.x>=this->getCurrentOriginalImg().size().width) compliantFt.x=this->getCurrentOriginalImg().size().width-1;
+    if (compliantFt.y>=this->getCurrentOriginalImg().size().height)  compliantFt.y=this->getCurrentOriginalImg().size().height-1;
 
     this->annotsRecord.updateCentroidFront(recordId, compliantCt, compliantFt);
 
@@ -1965,7 +1979,7 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
             // it doesn't make sense to record an empty object - we skip it
             return -1;
     }
-    else if (this->config.getProperty(whichClass).classType != _ACT_CentroidFrontOnly)
+    else if (this->config.getProperty(whichClass).classType == _ACT_CentroidFrontOnly)
     {
         newAnnot.Centroid = topLeftCorner;
         newAnnot.Front = bottomRightCorner;
@@ -1976,10 +1990,16 @@ int AnnotationsSet::addAnnotation(const cv::Point2i& topLeftCorner, const cv::Po
         if (newAnnot.Front.x<0) newAnnot.Front.x=0;
         if (newAnnot.Front.y<0) newAnnot.Front.y=0;
 
+        /*
         if (newAnnot.Centroid.x>=this->getCurrentOriginalImg().size().height) newAnnot.Centroid.x=this->getCurrentOriginalImg().size().height-1;
         if (newAnnot.Centroid.y>=this->getCurrentOriginalImg().size().width)  newAnnot.Centroid.y=this->getCurrentOriginalImg().size().width-1;
         if (newAnnot.Front.x   >=this->getCurrentOriginalImg().size().height) newAnnot.Front.x   =this->getCurrentOriginalImg().size().height-1;
         if (newAnnot.Front.y   >=this->getCurrentOriginalImg().size().width)  newAnnot.Front.y   =this->getCurrentOriginalImg().size().width-1;
+        */
+        if (newAnnot.Centroid.x>=this->getCurrentOriginalImg().size().width)   newAnnot.Centroid.x=this->getCurrentOriginalImg().size().width-1;
+        if (newAnnot.Centroid.y>=this->getCurrentOriginalImg().size().height)  newAnnot.Centroid.y=this->getCurrentOriginalImg().size().height-1;
+        if (newAnnot.Front.x   >=this->getCurrentOriginalImg().size().width)   newAnnot.Front.x   =this->getCurrentOriginalImg().size().width-1;
+        if (newAnnot.Front.y   >=this->getCurrentOriginalImg().size().height)  newAnnot.Front.y   =this->getCurrentOriginalImg().size().height-1;
 
         // still generating the rectangle, this is quite useful actually...
         newAnnot.BoundingBox = Rect2i(newAnnot.Centroid, newAnnot.Front);
@@ -2853,7 +2873,7 @@ void AnnotationsSet::mergeIntraFrameAnnotations(int newClassId, int newObjectId,
 
 
     // if (this->config.getProperty(newClassId).classType == _ACT_BoundingBoxOnly)
-    if (this->config.getProperty(newClassId).classType != _ACT_BoundingBoxOnly)
+    if ((this->config.getProperty(newClassId).classType != _ACT_BoundingBoxOnly) || (this->config.getProperty(newClassId).classType != _ACT_CentroidFrontOnly))
     {
         // if it's bounding boxes only, we won't ever need to modify some images
 
@@ -3161,7 +3181,7 @@ void AnnotationsSet::saveAnnotationsImageFile(const std::string& fileName, const
     {
         classUniform.push_back(this->config.getProperty(i+1).classType==_ACT_Uniform);
 
-        if (this->config.getProperty(i+1).classType == _ACT_BoundingBoxOnly)
+        if ( (this->config.getProperty(i+1).classType == _ACT_BoundingBoxOnly) || (this->config.getProperty(i+1).classType == _ACT_CentroidFrontOnly) )
         {
             // give an impossible color so that it is not taken into account
             minColorIndex.push_back(Vec3b(0,0,0));
