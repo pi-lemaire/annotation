@@ -153,6 +153,43 @@ namespace QtCvUtils
    }
 
 
+
+   inline QString getDirectory(const QString& filePath)
+   {
+       QFileInfo fi(filePath);
+       return fi.absolutePath() + "/";
+   }
+
+   inline QString getAbsolutePath(const QString& fromDir, const QString& relativeTo)
+   {
+       if (relativeTo.right(1) =="/")
+           return QDir::cleanPath(fromDir+relativeTo) + "/";
+       else
+           return QDir::cleanPath(fromDir+relativeTo);
+   }
+
+   inline QString getRelativePath(const QString& fromPath, const QString& toPath)
+   {
+       QDir dir(getDirectory(fromPath));
+       return dir.relativeFilePath(toPath) + "/";
+   }
+
+
+   inline std::string getRelativePath(const std::string& fromPath, const std::string& toPath)
+   {
+       return getRelativePath(QString::fromStdString(fromPath), QString::fromStdString(toPath)).toStdString();
+   }
+
+   inline std::string getAbsolutePath(const std::string& fromDir, const std::string& relativeTo)
+   {
+       return getAbsolutePath(QString::fromStdString(fromDir), QString::fromStdString(relativeTo)).toStdString();
+   }
+
+   inline std::string getDirectory(const std::string& filePath)
+   {
+       return getDirectory(QString::fromStdString(filePath)).toStdString();
+   }
+
    template<typename T>
    inline T getMax(T v1, T v2) { return (v1>v2) ? v1 : v2; }
 

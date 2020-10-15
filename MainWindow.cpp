@@ -165,6 +165,7 @@ void MainWindow::selectAnnot(int id)
 void MainWindow::updateActionsAvailability()
 {
     this->loadClassesConfigAct->setEnabled(!(this->annotations->isImageOpen() || this->annotations->isVideoOpen()));
+    // this->nextFrameAct->setEnabled((!this->annotations->isVideoOpen()) || this->annotations->canReadNextFrame());   // we enable the next frame button if it's not a video, to browse the next file in case iwe're annotating an image
     this->nextFrameAct->setEnabled(this->annotations->canReadNextFrame());
     this->prevFrameAct->setEnabled(this->annotations->canReadPrevFrame());
     this->closeFileAct->setEnabled(this->annotations->isImageOpen() || this->annotations->isVideoOpen());
@@ -320,6 +321,7 @@ void MainWindow::saveCurrentImage()
         this->annotations->saveCurrentAnnotationImage(fileName.toStdString());
 }
 
+
 void MainWindow::closeFile()
 {
     this->annotations->closeFile(maybeSave());
@@ -327,6 +329,119 @@ void MainWindow::closeFile()
     this->annotsBrowser->updateBrowser(-1);
     this->annotateArea->reload();
 }
+
+
+
+
+void MainWindow::nextFile()
+{
+    std::string imFileName = this->annotations->getOpenedFileName();
+    if (imFileName.length()>2)  // there was something open
+    {
+        std::string imFolder = this->annotations->getOpenedFilePath();
+
+        QDirIterator it(imFolder.c_str(), QStringList() << "*.png" << "*.jpg", QDir::Files);
+        bool fileFound = false;
+        while (it.hasNext())
+        {
+            // explore the image folder and try to find the followup
+            QString currFile = it.next();
+
+            QFileInfo fi(currFile);
+            QString fileName = fi.fileName();
+
+            if (currFile.length()<3)
+                continue;
+
+            if (fileFound)
+            {
+                // at this point, we have found a candidate. So, we must verify whether the user may have forgotten to save the current state
+                if (!this->maybeSave())
+                    return;
+
+                // we will load either the annotation file when it exists, either directly the image file
+                std::string tryAnnotationFile = QDir::cleanPath(QString::fromStdString( this->annotations->getConfig().getSummaryFileName(imFolder, fileName.toStdString()))).toStdString();
+
+                // qDebug() << "searching for file : " << QString::fromStdString(tryAnnotationFile);
+
+                if (QFile::exists(tryAnnotationFile.c_str()))
+                    this->annotateArea->openAnnotations(QString::fromStdString(tryAnnotationFile));
+                else
+                {
+                    this->annotations->closeFile(false);
+                    this->annotateArea->openImage(currFile);
+                }
+
+                break;
+            }
+
+            if (fileName == QString::fromStdString(imFileName))
+                fileFound = true;
+        }
+        // qDebug() << QString::fromStdString( imFileName);
+    }
+
+    this->annotsBrowser->updateBrowser(-1);
+    this->annotateArea->reload();
+}
+
+
+
+
+void MainWindow::prevFile()
+{
+    std::string imFileName = this->annotations->getOpenedFileName();
+    if (imFileName.length()>2)  // there was something open
+    {
+        std::string imFolder = this->annotations->getOpenedFilePath();  // must be an absolute path, ending with a '/'
+
+        QString prevKnownFile = "";
+
+        QDirIterator it(imFolder.c_str(), QStringList() << "*.png" << "*.jpg", QDir::Files);
+
+        while (it.hasNext())
+        {
+            QString currFile = it.next();
+
+            QFileInfo fi(currFile);
+            QString fileName = fi.fileName();
+
+            if (currFile.length()<3)
+                continue;
+
+            if (fileName == QString::fromStdString(imFileName))
+            {
+
+                // at this point, we have found a candidate. So, we must verify whether the user may have forgotten to save the current state
+                if (!this->maybeSave())
+                    return;
+
+                // we will load either the annotation file when it exists, either directly the image file
+                std::string tryAnnotationFile = QDir::cleanPath(QString::fromStdString( this->annotations->getConfig().getSummaryFileName(imFolder, prevKnownFile.toStdString()))).toStdString();
+
+                // qDebug() << "searching for file : " << QString::fromStdString(tryAnnotationFile);
+
+                if (QFile::exists(tryAnnotationFile.c_str()))
+                    this->annotateArea->openAnnotations(QString::fromStdString(tryAnnotationFile));
+                else
+                {
+                    this->annotations->closeFile(false);
+                    this->annotateArea->openImage(QString::fromStdString(imFolder) + prevKnownFile);
+                }
+
+                break;
+            }
+
+            prevKnownFile = fileName;
+        }
+        // qDebug() << QString::fromStdString( imFileName);
+    }
+
+    this->annotsBrowser->updateBrowser(-1);
+    this->annotateArea->reload();
+}
+
+
 
 
 
@@ -526,10 +641,10 @@ void MainWindow::createActions()
     this->saveAct = new QAction(tr("&Save State"), this);
     connect(this->saveAct, SIGNAL(triggered()), this, SLOT(save()));
 
-    this->saveAnnotationsAct = new QAction(tr("&Save Annotations As"), this);
+    this->saveAnnotationsAct = new QAction(tr("Save Annotations As"), this);
     connect(this->saveAnnotationsAct, SIGNAL(triggered()), this, SLOT(saveAnnotationsAs()));
 
-    this->saveAsCsvAct = new QAction(tr("&Save Annotations As a CSV file"), this);
+    this->saveAsCsvAct = new QAction(tr("Save Annotations As a CSV file"), this);
     connect(this->saveAsCsvAct, SIGNAL(triggered()), this, SLOT(saveAsCsv()));
 
     this->saveCurrentImageAct = new QAction(tr("Save &Current Annotation (single frame)"), this);
@@ -548,6 +663,16 @@ void MainWindow::createActions()
 
     this->closeFileAct = new QAction(tr("&Close"), this);
     connect(this->closeFileAct, SIGNAL(triggered()), this, SLOT(closeFile()));
+
+
+    this->nextFileAct = new QAction(tr("&Next File"), this);
+    connect(this->nextFileAct, SIGNAL(triggered()), this, SLOT(nextFile()));
+    this->prevFileAct = new QAction(tr("&Previous File"), this);
+    connect(this->prevFileAct, SIGNAL(triggered()), this, SLOT(prevFile()));
+
+    this->nextFileAct->setShortcuts(QKeySequence::Forward);
+    this->prevFileAct->setShortcuts(QKeySequence::Back);
+
 
 
     this->exitAct = new QAction(tr("E&xit"), this);
@@ -698,6 +823,9 @@ void MainWindow::createMenus()
     this->fileMenu->addAction(this->printAct);
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->closeFileAct);
+    this->fileMenu->addSeparator();
+    this->fileMenu->addAction(this->nextFileAct);
+    this->fileMenu->addAction(this->prevFileAct);
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->exitAct);
 

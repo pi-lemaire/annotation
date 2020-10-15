@@ -1001,6 +1001,8 @@ cv::Mat& AnnotationsSet::accessCurrentContours()
 
 bool AnnotationsSet::loadOriginalImage(const std::string& imgFileName)
 {
+    // qDebug() << "trying to open image file " << QString::fromStdString(imgFileName);
+
     // load the file
     Mat im = imread(imgFileName);
 
@@ -1321,6 +1323,8 @@ string AnnotationsSet::getDefaultCurrentImageSaveFileName() const
 
 bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
 {
+    // qDebug() << "appel loadAnnotations : " << QString::fromStdString(annotationsFileName);
+
     // open the file
     FileStorage fsR(annotationsFileName, FileStorage::READ);
 
@@ -1335,6 +1339,16 @@ bool AnnotationsSet::loadAnnotations(const std::string& annotationsFileName)
     globalAnnotsFnd[_AnnotationsSet_YAMLKey_FilePath] >> this->imageFilePath;
     globalAnnotsFnd[_AnnotationsSet_YAMLKey_ImageFileName] >> this->imageFileName;
     globalAnnotsFnd[_AnnotationsSet_YAMLKey_VideoFileName] >> this->videoFileName;
+
+    // from now on, we prefer to use the absolute path within the application
+    if (this->imageFilePath[0] != '/')  // not absolute
+    {
+        std::string annotationsDirectory = QtCvUtils::getDirectory(annotationsFileName);
+        this->imageFilePath = QtCvUtils::getAbsolutePath(annotationsDirectory, this->imageFilePath);
+
+        // qDebug() << "annotationsDirectory value : " << QString::fromStdString(annotationsDirectory);
+        // qDebug() << "deduced imageFilePath : " << QString::fromStdString(this->imageFilePath);
+    }
 
     // load the configuration before anything else
     this->config.readContentFromYaml(globalAnnotsFnd);
@@ -1415,7 +1429,12 @@ bool AnnotationsSet::saveCurrentState(const std::string& forceFileName, bool sav
     // add a node, since loading is way more complicated when we don't add a base node
     fs << _AnnotationsSet_YAMLKey_Node << "{";
 
-    fs << _AnnotationsSet_YAMLKey_FilePath << this->imageFilePath;
+    string saveFilePath = QtCvUtils::getRelativePath(savingFileName, this->imageFilePath);
+    if ((saveFilePath.length()>1) && (saveFilePath[saveFilePath.length()-1] != '/'))
+        saveFilePath = saveFilePath + '/';
+
+    // fs << _AnnotationsSet_YAMLKey_FilePath << this->imageFilePath;
+    fs << _AnnotationsSet_YAMLKey_FilePath << saveFilePath;
     fs << _AnnotationsSet_YAMLKey_ImageFileName << this->imageFileName;
     fs << _AnnotationsSet_YAMLKey_VideoFileName << this->videoFileName;
 

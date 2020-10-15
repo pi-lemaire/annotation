@@ -296,26 +296,81 @@ void AnnotateArea::displayNextFrame()
     // if none was selected, the record should return some impossible filled object?
     AnnotationObject previouslySelectedObj = this->annotations->getRecord().getAnnotationById(this->selectedObjectId);
 
-    if (this->annotations->loadNextFrame())
+    /*
+    if (this->annotations->isVideoOpen())
     {
-        // preselect the same object than what was previously selected
-        this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
-                                                                                  previouslySelectedObj.ClassId,
-                                                                                  previouslySelectedObj.ObjectId );
-        // if no object corresponds, it will be -1 - exactly what we need
+    */
+        if (this->annotations->loadNextFrame())
+        {
+            // preselect the same object than what was previously selected
+            this->selectedObjectId = this->annotations->getRecord().searchAnnotation( this->annotations->getCurrentFramePosition(),
+                                                                                      previouslySelectedObj.ClassId,
+                                                                                      previouslySelectedObj.ObjectId );
+            // if no object corresponds, it will be -1 - exactly what we need
 
-        this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
+            this->BackgroundImage = QtCvUtils::cvMatToQImage(this->annotations->getCurrentOriginalImg());
 
-        this->updatePaintImages();
+            this->updatePaintImages();
 
-        this->selectAnnotation(this->selectedObjectId);
+            this->selectAnnotation(this->selectedObjectId);
 
-        // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
+            // nothing should have changed, so we don't need to update PaintingImage or ObjectImage
 
-        update();
+            update();
 
-        this->updateStatusBar();
+            this->updateStatusBar();
+        }
+        /*
     }
+    else    // should be an image, try to load the next image file
+    {
+        std::string imFileName = this->annotations->getOpenedFileName();
+        if (imFileName.length()>2)  // there was something open
+        {
+            std::string imFolder = this->annotations->getOpenedFilePath();
+
+            QDirIterator it(imFolder.c_str(), QStringList() << "*.png" << "*.jpg", QDir::Files);
+            bool fileFound = false;
+            while (it.hasNext())
+            {
+                QString currFile = it.next();
+
+                if (currFile.length()<3)
+                    continue;
+
+                if (fileFound)
+                {
+                    // we will load either the annotation file when it exists, either directly the image file
+                    std::string::size_type slashPos = currFile.toStdString().find_last_of('/');
+                    std::string imageFileName = currFile.toStdString().substr(slashPos+1);
+                    std::string tryAnnotationFile = QDir::cleanPath(QString::fromStdString( this->annotations->getConfig().getSummaryFileName(imFolder, imageFileName))).toStdString();
+
+                    // qDebug() << "searching for file : " << QString::fromStdString(tryAnnotationFile);
+
+                    if (QFile::exists(tryAnnotationFile.c_str()))
+                        this->openAnnotations(QString::fromStdString(tryAnnotationFile));
+                    else
+                    {
+                        this->annotations->closeFile(false);
+                        this->openImage(currFile);
+                    }
+
+                    break;
+                }
+
+                if (currFile == QString::fromStdString(imFolder + imFileName))
+                    fileFound = true;
+
+                // /etc/.
+                // /etc/..
+                // /etc/X11
+                // /etc/X11/fs
+                // ...
+            }
+            // qDebug() << QString::fromStdString( imFileName);
+        }
+    }
+    */
 }
 
 

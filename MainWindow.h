@@ -100,6 +100,8 @@ private slots:
     void saveAsCsv();
     void saveCurrentImage();
     void closeFile();
+    void nextFile();
+    void prevFile();
 
     void loadConfiguration();
     void configureSuperPixels();
@@ -174,6 +176,9 @@ private:
     QAction *nextFrameAct;
     QAction *prevFrameAct;
     QAction *jumpToLastAnnotatedFrameAct;
+
+    QAction *nextFileAct;
+    QAction *prevFileAct;
 
     // pen related actions
     QAction *penWidthAct, *increasePenWidthAct, *decreasePenWidthAct, *penStyleRoundAct, *penStyleSquareAct;
