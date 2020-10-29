@@ -527,6 +527,8 @@ void AnnotateArea::selectAnnotation(int annotId)
     // update the part containing both the old and the new ROI
     this->update( this->adaptToScaleMul(updateRoi.adjusted(-2,-2,2,2)) );
 
+    this->updateStatusBar();
+
     emit selectedObject(annotId);
 }
 
@@ -907,6 +909,8 @@ void AnnotateArea::mouseMoveEvent(QMouseEvent *event)
         }
 
         QRect newArea = this->currentBBEditionFixedRect | currPointRect;
+        if ((newArea.width()==0) || newArea.height()==0)
+            newArea = currPointRect;
 
         this->annotations->editAnnotationBoundingBox( this->selectedObjectId, cv::Rect2i(cv::Point2i(newArea.left(), newArea.top()),
                                                                                          cv::Point2i(newArea.right(), newArea.bottom())) );
@@ -1191,8 +1195,10 @@ void AnnotateArea::updateStatusBar()
     const QString rubberMsg = this->rubberMode ? tr("  --RUBBER MODE ON-- ") : "";
     //const QString recordingMsg = (videoSaveName.length()>3) ? tr(" > \"%1\"").arg(videoSaveName) : "";
 
-    const QString message = tr("%1%2%3--- Zoom: x%4")
-        .arg(openedMsg).arg(modeMsg).arg(rubberMsg).arg(this->scaleFactor);
+    const QString selectionMsg = (this->selectedObjectId>-1) ? tr(" --Selected object dims: (%1,%2)-- ").arg(this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox.width).arg(this->annotations->getRecord().getAnnotationById(this->selectedObjectId).BoundingBox.height) : "";
+
+    const QString message = tr("%1%2%3--- Zoom: x%4%5")
+        .arg(openedMsg).arg(modeMsg).arg(selectionMsg).arg(this->scaleFactor).arg(rubberMsg);
     // this->statusBar()->showMessage(message);
     emit newStatusBarMessage(message);
 }

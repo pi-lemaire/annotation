@@ -1877,7 +1877,13 @@ bool AnnotationsSet::loadCurrentAnnotationImage()
 
 void AnnotationsSet::editAnnotationBoundingBox(int recordId, const Rect2i& newBB)
 {
-    this->annotsRecord.updateBoundingBox( recordId, newBB & Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()) );
+    cv::Rect2i newBBCopy = newBB;
+    if (newBBCopy.width==0)
+        newBBCopy.width = 1;
+    if (newBBCopy.height==0)
+        newBBCopy.height = 1;
+
+    this->annotsRecord.updateBoundingBox( recordId, newBBCopy & Rect2i(Point2i(0,0), this->getCurrentOriginalImg().size()) );
 
     this->changesPerformedUponCurrentAnnot = true;
 }
