@@ -71,6 +71,8 @@ MainWindow::MainWindow()
     this->SPAnnotate = new SuperPixelsAnnotate(this->annotations);
     this->OFTracking = new OptFlowTracking(this->annotations);
 
+    this->ntwrkHndlr = new NetworkHandler(this);
+
 
     // generate the interface, give the right pointer
     this->annotateArea = new AnnotateArea(this->annotations, this->SPAnnotate, this->OFTracking);
@@ -128,6 +130,15 @@ MainWindow::MainWindow()
 
 
 
+
+    /*
+    NetworkHandler *nH = new NetworkHandler(this);
+    if (nH->loadNetworkConfiguration("/Volumes/LaCie/stationair/GroundTruth/DetectionPurposes/NetworkCfgFile.json"))
+        qDebug() << "no error loading the fucking CFG file";
+    else
+        qDebug() << "error loading the fucking CFG file";
+        */
+
     setWindowTitle(tr("Annotate"));
     resize(800, 600);
 }
@@ -161,6 +172,8 @@ void MainWindow::selectAnnot(int id)
 
     this->annotateArea->selectAnnotation(id);
 }
+
+
 
 void MainWindow::updateActionsAvailability()
 {
@@ -293,6 +306,8 @@ void MainWindow::saveAnnotationsAs()
 void MainWindow::save()
 {
     this->annotations->saveCurrentState();
+
+    this->ntwrkHndlr->notifyNewAnnotationFile(QString::fromStdString(this->annotations->getOpenedFileName()));
 }
 
 
@@ -442,6 +457,21 @@ void MainWindow::prevFile()
 }
 
 
+
+
+void MainWindow::loadNetworkConf()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+                               tr("Open Network Configuration File"), QDir::currentPath(), tr("XML/YAML/JSON file (*.xml *.yaml *.json)"));
+    if (!fileName.isEmpty())
+    {
+        if (this->ntwrkHndlr->loadNetworkConfiguration(fileName))
+        {
+            qDebug() << "configuration loaded and synchronization alright";
+        }
+    }
+
+}
 
 
 
@@ -683,6 +713,13 @@ void MainWindow::createActions()
 
 
 
+    this->networkCfgLoadAct = new QAction(tr("Load Network Configuration"), this);
+    connect(this->networkCfgLoadAct, SIGNAL(triggered()), this, SLOT(loadNetworkConf()));
+    this->networkSoftSyncAct = new QAction(tr("Network Soft Synchronization"), this);
+    connect(this->networkSoftSyncAct, SIGNAL(triggered()), this->ntwrkHndlr, SLOT(softSync()));
+    this->networkHardSyncAct = new QAction(tr("Network Hard Synchronization"), this);
+    connect(this->networkHardSyncAct, SIGNAL(triggered()), this->ntwrkHndlr, SLOT(hardSync()));
+
 
     this->loadClassesConfigAct = new QAction(tr("&Load classes"), this);
     connect(this->loadClassesConfigAct, SIGNAL(triggered()), this, SLOT(loadConfiguration()));
@@ -826,6 +863,10 @@ void MainWindow::createMenus()
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->nextFileAct);
     this->fileMenu->addAction(this->prevFileAct);
+    this->fileMenu->addSeparator();
+    this->fileMenu->addAction(this->networkCfgLoadAct);
+    this->fileMenu->addAction(this->networkSoftSyncAct);
+    this->fileMenu->addAction(this->networkHardSyncAct);
     this->fileMenu->addSeparator();
     this->fileMenu->addAction(this->exitAct);
 

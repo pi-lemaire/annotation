@@ -63,6 +63,7 @@
 #include "DialogClassSelection.h"
 #include "AnnotationsBrowser.h"
 #include "ParamsQEditorWindow.h"
+#include "NetworkHandler.h"
 
 #include "SuperPixelsAnnotate.h"
 #include "OptFlowTracking.h"
@@ -102,6 +103,8 @@ private slots:
     void closeFile();
     void nextFile();
     void prevFile();
+
+    void loadNetworkConf();
 
     void loadConfiguration();
     void configureSuperPixels();
@@ -146,6 +149,7 @@ private:
     OptFlowTracking *OFTracking;
 
 
+    NetworkHandler *ntwrkHndlr;
 
 
 
@@ -179,6 +183,8 @@ private:
 
     QAction *nextFileAct;
     QAction *prevFileAct;
+
+    QAction *networkCfgLoadAct, *networkSoftSyncAct, *networkHardSyncAct;
 
     // pen related actions
     QAction *penWidthAct, *increasePenWidthAct, *decreasePenWidthAct, *penStyleRoundAct, *penStyleSquareAct;
