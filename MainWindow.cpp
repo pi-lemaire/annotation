@@ -720,6 +720,10 @@ void MainWindow::createActions()
     this->networkHardSyncAct = new QAction(tr("Network Hard Synchronization"), this);
     connect(this->networkHardSyncAct, SIGNAL(triggered()), this->ntwrkHndlr, SLOT(hardSync()));
 
+    this->networkCfgLoadAct->setShortcut(QKeySequence::Find);
+    this->networkSoftSyncAct->setShortcut(QKeySequence::Refresh);
+    this->networkSoftSyncAct->setShortcut(QKeySequence::FindNext);
+
 
     this->loadClassesConfigAct = new QAction(tr("&Load classes"), this);
     connect(this->loadClassesConfigAct, SIGNAL(triggered()), this, SLOT(loadConfiguration()));

@@ -36,7 +36,7 @@ DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs depr
 
 
 #QT += widgets
-
+QT += network
 
 
 
@@ -48,6 +48,7 @@ HEADERS       = \
     AnnotationsSet.h \
     MainWindow.h \
     DialogClassSelection.h \
+    NetworkHandler.h \
     QtCvUtils.h \
     AnnotationsBrowser.h \
     ParamsHandler.h \
@@ -61,6 +62,7 @@ SOURCES       = main.cpp \
     DialogClassSelection.cpp \
     AnnotationsBrowser.cpp \
     MainWindow.cpp \
+    NetworkHandler.cpp \
     ParamsQEditorWindow.cpp \
     ParamsQEditorLine.cpp \
     SuperPixelsAnnotate.cpp \
