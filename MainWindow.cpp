@@ -722,7 +722,7 @@ void MainWindow::createActions()
 
     this->networkCfgLoadAct->setShortcut(QKeySequence::Find);
     this->networkSoftSyncAct->setShortcut(QKeySequence::Refresh);
-    this->networkSoftSyncAct->setShortcut(QKeySequence::FindNext);
+    this->networkHardSyncAct->setShortcut(QKeySequence::FindNext);
 
 
     this->loadClassesConfigAct = new QAction(tr("&Load classes"), this);
