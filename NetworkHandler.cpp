@@ -263,6 +263,7 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                     qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixCsv;
 
                 // qDebug() << "downloaded file " << localPathWithoutExtension;
+                qDebug() << "donloaded annotation for image file " << this->ImagesFileList[k];
 
                 this->LocalSyncEntries[k].clear();
                 this->LocalSyncEntries[k].push_back(currEntry);
@@ -288,6 +289,8 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                 if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
                      && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
                 {
+                    qDebug() << "uploaded annotation for image file " << this->ImagesFileList[k];
+
                     newEntries = true;
                     this->SyncEntries[k].push_back(newEntry);
                     this->LocalSyncEntries[k].clear();
@@ -321,6 +324,8 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
         if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixYaml, this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixYaml)
              && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixCsv , this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixCsv) )
         {
+            qDebug() << "uploaded annotation for image file " << this->ImagesFileList[imageId];
+
             newEntries = true;
             this->SyncEntries[imageId].push_back(newEntry);
             this->LocalSyncEntries[k].clear();
@@ -347,7 +352,6 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
     }
 
     this->KnownNewAnnotations.clear();
-
 
     return true;
 }
