@@ -123,7 +123,15 @@ QByteArray NetworkHandler::downloadedData() const {
 void NetworkHandler::softSync()
 {
     if (this->NetworkConfLoaded)
-        this->synchronize();
+    {
+        qDebug() << "----";
+        qDebug() << "Starting the SOFT synchronization process...";
+        if (this->synchronize())
+        {
+            qDebug() << "... The SOFT synchronization process ended well.";
+            qDebug() << "----";
+        }
+    }
 }
 
 
@@ -131,7 +139,15 @@ void NetworkHandler::softSync()
 void NetworkHandler::hardSync()
 {
     if (this->NetworkConfLoaded)
-        this->synchronize(false, true);
+    {
+        qDebug() << "----";
+        qDebug() << "Starting the HARD synchronization process...";
+        if (this->synchronize(false, true))
+        {
+            qDebug() << "... The HARD synchronization process ended well.";
+            qDebug() << "----";
+        }
+    }
 }
 
 
@@ -437,6 +453,10 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
     // however, since we're performing a first check, we will check whether there's new content over the internet.
     // we want it to happen in THIS file and not in the loadSyncDataFile() in case someone else is working at the same time...
     this->KnownNewAnnotations.clear();
+
+    qDebug() << "----";
+    qDebug() << "Network Configuration file loaded";
+    qDebug() << "----";
 
     return this->synchronize(true);
 }
