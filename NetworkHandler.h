@@ -24,6 +24,7 @@ const std::string _NetworkHandler_YAMLKey_FTP_login = "FTP_Login";
 const std::string _NetworkHandler_YAMLKey_FTP_password = "FTP_Password";
 
 const std::string _NetworkHandler_YAMLKey_SyncDataFilename = "SyncData_Filename";
+const std::string _NetworkHandler_YAMLKey_LocalSyncDataFilename = "LocalSyncData_Filename";
 
 const std::string _NetworkHandler_YAMLKey_ImgRelativePath = "ImagesRelPath";
 const std::string _NetworkHandler_YAMLKey_AnnRelativePath = "AnnotsRelPath";
@@ -72,18 +73,21 @@ class NetworkHandler : public QObject {
 
     private:
         bool loadSyncDataFile();
-        bool recordSyncDataFile();
+        bool recordSyncDataFile(bool onlyLocal=false);
+
+        bool networkSyncEquals(const _NetworkHandler_SyncEntry&, const _NetworkHandler_SyncEntry&) const;
 
         QNetworkAccessManager m_WebCtrl;
         QByteArray m_DownloadedData;
         QString fileNameToSaveTo;
 
-        QString distantDLUrl, localPath, syncDataFilename,
+        QString distantDLUrl, localPath, syncDataFilename, localSyncDataFilename,
                 distantULUrl, ULUserName, ULPassword,
                 imgRelativePath, annotsRelativePath, annotsPostfixYaml, annotsPostfixCsv,
                 annotaterName;
 
         std::vector< std::vector<_NetworkHandler_SyncEntry> > SyncEntries;  // same length as the imagesfilelist, every 2nd dim vector is a list of available annotations. Only the most recent one is important.
+        std::vector< std::vector<_NetworkHandler_SyncEntry> > LocalSyncEntries;  // same length as the imagesfilelist, every 2nd dim vector is a list of available annotations. Only the most recent one is important.
 
         std::vector<QString> ImagesFileList;
         std::vector<QString> KnownNewAnnotations;

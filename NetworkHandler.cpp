@@ -1,12 +1,20 @@
 #include "NetworkHandler.h"
 
+
+
+
 NetworkHandler::NetworkHandler( QObject *parent) : QObject(parent)
 {
     // connect( &m_WebCtrl, SIGNAL (finished(QNetworkReply*)), this, SLOT (fileDownloaded(QNetworkReply*)) );
     this->NetworkConfLoaded = false;
 }
 
+
+
 NetworkHandler::~NetworkHandler() { }
+
+
+
 
 bool NetworkHandler::DownloadFileByUrl(const QString& path, const QString& differentLocalPath)
 {
@@ -42,6 +50,8 @@ bool NetworkHandler::DownloadFileByUrl(const QString& path, const QString& diffe
         return true;
     }
 
+    reply->close();
+
     return false;
     // emit downloaded();
 }
@@ -63,11 +73,14 @@ bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilen
     file.open(QIODevice::ReadOnly);
     QNetworkAccessManager *nam = new QNetworkAccessManager;
     QNetworkRequest requp(ulUrl);
-    QNetworkReply *reply = nam->put(requp,&file);
+    QNetworkReply *reply;
 
     QEventLoop loop;
     connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
     connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), &loop, SLOT(quit()));
+
+    reply = nam->put(requp,&file);
+
     loop.exec();
 
     file.close();
@@ -125,6 +138,12 @@ void NetworkHandler::hardSync()
 }
 
 
+bool NetworkHandler::networkSyncEquals(const _NetworkHandler_SyncEntry& nsa, const _NetworkHandler_SyncEntry& nsb) const
+{
+    return (nsa.Author==nsb.Author && nsa.DateTime==nsb.DateTime && nsa.ImageFileName==nsb.ImageFileName && nsa.FilenamePostfix==nsb.FilenamePostfix);
+}
+
+
 
 bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 {
@@ -163,6 +182,7 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 
     // std::vector<_NetworkHandler_SyncEntry> additionalEntries;
     bool newEntries = false;
+    bool newLocalEntries = false;
 
     if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
         qDebug() << "there was an issue loading the synchronization file";
@@ -203,18 +223,41 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
             QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currEntry.ImageFileName);
             QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currEntry.FilenamePostfix);
 
-            // now one option is hard-sync : we sync anyway
-            // if we cannot find the corresponding file on the local system : we do too
-            if (    hardSync
-                 || !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixYaml).toStdString() )
-                 || !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixCsv ).toStdString() ) )
+
+            // now we want to determine if we have to download the distant file
+            bool doWeDownload =    !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixYaml).toStdString() )
+                                || !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixCsv ).toStdString() );
+
+            // if we cannot find the corresponding file on the local system : we have to download the file
+
+            // another case is HardSync. If we're in hard sync mode and the file exists, it should be recorded locally somewhere
+            // in this case, if the entry is different, then: we have to download it
+
+            if (hardSync)
+            {
+                if (this->LocalSyncEntries[k].size()==0)
+                    doWeDownload = true;
+                else if (!this->networkSyncEquals(LocalSyncEntries[k][0],currEntry))
+                    doWeDownload = true;
+            }
+
+            // if we download it, we also save it
+            if (doWeDownload)
             {
                 if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml))
                     qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixYaml;
                 if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv))
                     qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixCsv;
+
+                // qDebug() << "downloaded file " << localPathWithoutExtension;
+
+                this->LocalSyncEntries[k].clear();
+                this->LocalSyncEntries[k].push_back(currEntry);
+
+                newLocalEntries = true;
             }
-            // now check if the file exists locally
+
+            // one last case (mostly when it's a first synchronization : there's no entry because the
         }
         else if (hardSync || firstCheck)
         {
@@ -234,6 +277,9 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                 {
                     newEntries = true;
                     this->SyncEntries[k].push_back(newEntry);
+                    this->LocalSyncEntries[k].clear();
+                    this->LocalSyncEntries[k].push_back(newEntry);
+                    newLocalEntries = true;
                 }
             }
         }
@@ -264,6 +310,9 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
         {
             newEntries = true;
             this->SyncEntries[imageId].push_back(newEntry);
+            this->LocalSyncEntries[k].clear();
+            this->LocalSyncEntries[k].push_back(newEntry);
+            newLocalEntries = true;
         }
         else
             qDebug() << "trouble uploading the " << this->KnownNewAnnotations[k] << " new annotation file";
@@ -275,105 +324,17 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
     {
         if (!this->recordSyncDataFile() || !this->UploadFile(this->syncDataFilename))
             qDebug() << "issue saving and uploading the sync data file";
-        else
-            qDebug() << "saved the sync data file alright";
+        //else
+        //    qDebug() << "saved the sync data file alright";
+    }
+    else if (newLocalEntries)
+    {
+        if (!this->recordSyncDataFile(true))
+            qDebug() << "having troubles saving the local only sync data file";
     }
 
     this->KnownNewAnnotations.clear();
 
-
-
-
-        // then, synchronize the
-
-
-            /*
-
-            if (    !QtCvUtils::fileExists( QString(this->localPath + this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml).toStdString() )
-                 || !QtCvUtils::fileExists( QString(this->localPath + this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv ).toStdString() ) )
-            {
-                // the file does not exist locally
-                // does the file exist on the distant repo???
-                // this may be quite painful, with a lot of connections, so we avoid to do it when it's not necessary
-                if ( distantCheck
-                     && this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
-                {
-                    this->AnnotsSyncList[k] = _NHSS_DistantOnly;
-
-                    if (!this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml, false))
-                        // files exist
-                        qDebug() << "we had an issue downloading the file " + this->ImagesFileList[k] + this->annotsPostfixYaml;
-
-                    if (!this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv, false))
-                        // files exist
-                        qDebug() << "we had an issue downloading the file " + this->ImagesFileList[k] + this->annotsPostfixCsv;
-
-                    // we downloaded the thing, we're up to date
-                    this->AnnotsSyncList[k] = _NHSS_Synchronized;
-                }
-            }
-
-            else
-            {
-                // the file exists locally
-                // we have just loaded the configuration file, so we assume that the data is the same between the server
-                // just suppose that the file is the same between the distant repo and the local one
-                if ( this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
-                    this->AnnotsSyncList[k] = _NHSS_Synchronized;
-                else
-                {
-                    if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
-                         && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
-                        this->AnnotsSyncList[k] = _NHSS_Synchronized;
-                    else
-                    {
-                        qDebug() << "issue uploading the file";
-                        this->AnnotsSyncList[k] = _NHSS_LocalOnly;
-                    }
-                }
-            }
-
-            */
-
-            /*
-        }
-    }
-    else
-    {
-        // just trust the vectors
-        for (size_t k=0; k<this->ImagesFileList.size(); k++)
-        {
-            // the annotation file already exists on the local system, does it exist online?
-            if (this->AnnotsSyncList[k] == _NHSS_LocalOnly)
-            {
-                // perform a check (in case the file was uploaded before the synchronization happened)
-                if (    this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
-                     && this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
-                {
-                    qDebug() << "there was a conflict around file " + this->ImagesFileList[k] + this->annotsPostfixYaml + " -- trying to upload it under a different number";
-
-                    int index = 0;
-                    while ( this->DownloadFileByUrl(this->annotsRelativePath + this->ImagesFileList[k] + "_" + index + this->annotsPostfixCsv) )
-                        index++;
-
-                    if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml, this->annotsRelativePath + this->ImagesFileList[k] + "_" + index + this->annotsPostfixYaml)
-                         && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv,  this->annotsRelativePath + this->ImagesFileList[k] + "_" + index + this->annotsPostfixCsv) )
-                        this->AnnotsSyncList[k] = _NHSS_Synchronized;
-                }
-                else
-                {
-                    // just upload without asking any question
-                    if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
-                         && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
-                        this->AnnotsSyncList[k] = _NHSS_Synchronized;
-                    else
-                    {
-                        qDebug() << "issue uploading the file";
-                        this->AnnotsSyncList[k] = _NHSS_LocalOnly;
-                    }
-                }
-            }
-            */
 
     return true;
 }
@@ -383,7 +344,7 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 
 void NetworkHandler::notifyNewAnnotationFile(const QString& correspondingImageFileName)
 {
-    qDebug() << "notify called : " << correspondingImageFileName;
+    // qDebug() << "notify called : " << correspondingImageFileName;
 
     if (!this->NetworkConfLoaded)
         return;
@@ -420,7 +381,7 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
     std::string StdStrDistantDLUrl,
                 StdStrDistantULUrl, StdStrULUserName, StdStrULPassword,
                 StdStrImgRelativePath, StdStrAnnotsRelativePath, StdStrAnnotsPostfixYaml, StdStrAnnotsPostfixCsv,
-                StdStrAuthor, StdStrSyncDataFile;
+                StdStrAuthor, StdStrSyncDataFile, StdStrLocalSyncDataFile;
 
     NetworkConfigFnd[_NetworkHandler_YAMLKey_HTTP_url] >> StdStrDistantDLUrl;
     NetworkConfigFnd[_NetworkHandler_YAMLKey_FTP_url] >> StdStrDistantULUrl;
@@ -432,6 +393,7 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
     NetworkConfigFnd[_NetworkHandler_YAMLKey_AnnotsPostfixCsv] >> StdStrAnnotsPostfixCsv;
     NetworkConfigFnd[_NetworkHandler_YAMLKey_AnnoterName] >> StdStrAuthor;
     NetworkConfigFnd[_NetworkHandler_YAMLKey_SyncDataFilename] >> StdStrSyncDataFile;
+    NetworkConfigFnd[_NetworkHandler_YAMLKey_LocalSyncDataFilename] >> StdStrLocalSyncDataFile;
 
 
     this->distantDLUrl = QString::fromStdString(StdStrDistantDLUrl);
@@ -444,6 +406,7 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
     this->annotsPostfixCsv = QString::fromStdString(StdStrAnnotsPostfixCsv);
     this->annotaterName = QString::fromStdString(StdStrAuthor);
     this->syncDataFilename = QString::fromStdString(StdStrSyncDataFile);
+    this->localSyncDataFilename = QString::fromStdString(StdStrLocalSyncDataFile);
 
     this->ImagesFileList.clear();
     this->SyncEntries.clear();
@@ -457,6 +420,7 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
         (*it) >> _fileName;
         this->ImagesFileList.push_back(QString::fromStdString(_fileName));
         this->SyncEntries.push_back( std::vector<_NetworkHandler_SyncEntry>() );
+        this->LocalSyncEntries.push_back( std::vector<_NetworkHandler_SyncEntry>() );
     }
 
     this->NetworkConfLoaded = true;
@@ -493,9 +457,19 @@ bool NetworkHandler::loadSyncDataFile()
     if (!fsIn.is_open())
         return false;
 
+    std::ifstream fsInLocal;
+    fsInLocal.open( QString(this->localPath + this->localSyncDataFilename).toStdString().c_str(), std::ifstream::in );
+    //if (!fsInLocal.is_open())
+    //    return false;
+    // if the local file doesn't exist : well it's no big deal, it will be created very soon. Just clear the list and don't care about it
+
     this->SyncEntries.clear();
+    this->LocalSyncEntries.clear();
     for (size_t k=0; k<this->ImagesFileList.size(); k++)
+    {
         this->SyncEntries.push_back(std::vector<_NetworkHandler_SyncEntry>());
+        this->LocalSyncEntries.push_back(std::vector<_NetworkHandler_SyncEntry>());
+    }
 
 
     while (!fsIn.eof())
@@ -540,7 +514,59 @@ bool NetworkHandler::loadSyncDataFile()
 
     }
 
+    fsIn.close();
 
+
+
+    if (fsInLocal.is_open())
+    {
+        while (!fsInLocal.eof())
+        {
+            std::string line;
+
+            //ifs.getline(newLine, 2048);
+            if (!std::getline(fsInLocal, line))
+                break;
+
+            std::vector<std::string> elems;
+            int prevPos = 0;
+            for (int i=0; i<(int)line.length(); i++)
+            {
+                if (line[i]==',')
+                {
+                    elems.push_back(line.substr(prevPos, (i-prevPos)));
+                    prevPos = i+1;
+                    //i++;
+                }
+            }
+            // don't forget to add the last elements
+            elems.push_back(line.substr(prevPos));
+
+            _NetworkHandler_SyncEntry currEntry;
+            currEntry.ImageFileName = elems[0];
+            currEntry.FilenamePostfix = elems[1];
+            currEntry.Author = elems[2];
+            currEntry.DateTime = elems[3];
+            currEntry.Status = _NHSS_Unknown;
+
+            for (size_t k=0; k<this->ImagesFileList.size(); k++)
+            {
+                // inserting the new entry directly in place
+                // actually, it might be possible to not start from 0 but the last tested index since everytime the file is recorded it should be ordered properly...
+                if (this->ImagesFileList[k] == QString::fromStdString(currEntry.ImageFileName))
+                {
+                    this->LocalSyncEntries[k].push_back(currEntry);
+                    break;
+                }
+            }
+            // there should be only one entry / image at most in this local version
+        }
+
+        fsInLocal.close();
+    }
+
+    /*
+    qDebug() << "distant entries :";
     for (size_t k=0; k<this->SyncEntries.size(); k++)
     {
         for (size_t j=0; j<this->SyncEntries[k].size(); j++)
@@ -552,21 +578,49 @@ bool NetworkHandler::loadSyncDataFile()
         }
     }
 
+    qDebug() << "local entries :";
+    for (size_t k=0; k<this->LocalSyncEntries.size(); k++)
+    {
+        for (size_t j=0; j<this->LocalSyncEntries[k].size(); j++)
+        {
+            qDebug() << "line " << k << " : " << QString::fromStdString(this->LocalSyncEntries[k][j].ImageFileName) << " - " <<
+                                                 QString::fromStdString(this->LocalSyncEntries[k][j].FilenamePostfix) << " - " <<
+                                                 QString::fromStdString(this->LocalSyncEntries[k][j].Author) << " - " <<
+                                                 QString::fromStdString(this->LocalSyncEntries[k][j].DateTime);
+        }
+    }
+    */
+
     return true;
 }
 
-bool NetworkHandler::recordSyncDataFile()
+bool NetworkHandler::recordSyncDataFile(bool localOnly)
 {
-    std::ofstream fsOut;
-    fsOut.open( QString(this->localPath + this->syncDataFilename).toStdString().c_str(), std::ofstream::out );
-    if (!fsOut.is_open())
+    if (!localOnly)
+    {
+        std::ofstream fsOut;
+        fsOut.open( QString(this->localPath + this->syncDataFilename).toStdString().c_str(), std::ofstream::out );
+        if (!fsOut.is_open())
+            return false;
+
+        for (size_t i=0; i<this->SyncEntries.size(); i++)
+            for (size_t j=0; j<this->SyncEntries[i].size(); j++)
+                fsOut << this->SyncEntries[i][j].ImageFileName << "," << this->SyncEntries[i][j].FilenamePostfix << "," << this->SyncEntries[i][j].Author << "," << this->SyncEntries[i][j].DateTime << std::endl;
+
+        fsOut.close();
+    }
+
+
+    std::ofstream fsOutLocal;
+    fsOutLocal.open( QString(this->localPath + this->localSyncDataFilename).toStdString().c_str(), std::ofstream::out );
+    if (!fsOutLocal.is_open())
         return false;
 
-    for (size_t i=0; i<this->SyncEntries.size(); i++)
-        for (size_t j=0; j<this->SyncEntries[i].size(); j++)
-            fsOut << this->SyncEntries[i][j].ImageFileName << "," << this->SyncEntries[i][j].FilenamePostfix << "," << this->SyncEntries[i][j].Author << "," << this->SyncEntries[i][j].DateTime << std::endl;
+    for (size_t i=0; i<this->LocalSyncEntries.size(); i++)
+        for (size_t j=0; j<this->LocalSyncEntries[i].size(); j++)
+            fsOutLocal << this->LocalSyncEntries[i][j].ImageFileName << "," << this->LocalSyncEntries[i][j].FilenamePostfix << "," << this->LocalSyncEntries[i][j].Author << "," << this->LocalSyncEntries[i][j].DateTime << std::endl;
 
-    fsOut.close();
+    fsOutLocal.close();
 
     return true;
 }
