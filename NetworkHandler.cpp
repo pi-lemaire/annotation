@@ -73,14 +73,11 @@ bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilen
     file.open(QIODevice::ReadOnly);
     QNetworkAccessManager *nam = new QNetworkAccessManager;
     QNetworkRequest requp(ulUrl);
-    QNetworkReply *reply;
+    QNetworkReply *reply = nam->put(requp,&file);
 
     QEventLoop loop;
     connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
     connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), &loop, SLOT(quit()));
-
-    reply = nam->put(requp,&file);
-
     loop.exec();
 
     file.close();
