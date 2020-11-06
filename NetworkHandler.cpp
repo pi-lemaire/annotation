@@ -7,6 +7,14 @@ NetworkHandler::NetworkHandler( QObject *parent) : QObject(parent)
 {
     // connect( &m_WebCtrl, SIGNAL (finished(QNetworkReply*)), this, SLOT (fileDownloaded(QNetworkReply*)) );
     this->NetworkConfLoaded = false;
+
+    connect( &m_WebCtrl_DL, SIGNAL (finished(QNetworkReply*)), this, SLOT (fileDownloaded(QNetworkReply*)) );
+    connect( &m_WebCtrl_UL, SIGNAL (finished(QNetworkReply*)), this, SLOT (fileUploaded(QNetworkReply*)) );
+
+    connect(this, SIGNAL(queuesDetermined()), this, SLOT(syncProcessImagesQueue()));
+    connect(this, SIGNAL(imagesQueueProcessed()), this, SLOT(syncProcessAnnotsDLQueue()));
+    connect(this, SIGNAL(annotsDownloadQueueProcessed()), this, SLOT(syncProcessAnnotsULQueue()));
+    connect(this, SIGNAL(annotsUploadQueueProcessed()), this, SLOT(syncProcessSave()));
 }
 
 
@@ -18,6 +26,7 @@ NetworkHandler::~NetworkHandler() { }
 
 bool NetworkHandler::DownloadFileByUrl(const QString& path, const QString& differentLocalPath)
 {
+    /*
     QString localFilePath = differentLocalPath;
     if (localFilePath=="")
         localFilePath = path;
@@ -51,6 +60,7 @@ bool NetworkHandler::DownloadFileByUrl(const QString& path, const QString& diffe
     }
 
     reply->close();
+    */
 
     return false;
     // emit downloaded();
@@ -58,8 +68,83 @@ bool NetworkHandler::DownloadFileByUrl(const QString& path, const QString& diffe
 
 
 
+
+
+
+
+
+void NetworkHandler::DownloadFile(const QString& distantFilename, const QString& localFilename)
+{
+    // qDebug() << "DownloadFile called : " << distantFilename << " - " << localFilename;
+
+    if (localFilename=="")
+        this->fileNameToSaveTo = this->localPath + distantFilename;
+    else
+        this->fileNameToSaveTo = this->localPath + localFilename;
+
+    QNetworkRequest request( QUrl(distantDLUrl + distantFilename) );
+    m_WebCtrl_DL.get(request);
+
+    qDebug() << "download lauched with url " << distantDLUrl + distantFilename << "is to be recorded to " << this->fileNameToSaveTo;
+}
+
+
+
+
+void NetworkHandler::fileDownloaded(QNetworkReply* pReply)
+{
+    //qDebug() << "=== entering fileDownloaded()";
+
+    bool success = false;
+
+    if (pReply->error()==QNetworkReply::NoError)
+    {
+        m_DownloadedData = pReply->readAll();
+        //emit a signal
+        pReply->deleteLater();
+
+        // Save the data to a file.
+        QSaveFile file(fileNameToSaveTo);
+        file.open(QIODevice::WriteOnly);
+        file.write(m_DownloadedData);
+        // Calling commit() is mandatory, otherwise nothing will be written.
+        file.commit();
+
+        success = true;
+    }
+
+    // actually, setting a small timer allows the state machine to work properly
+    QTimer timer;
+    timer.setSingleShot(true);
+    QEventLoop loop;
+    connect( &timer, &QTimer::timeout, &loop, &QEventLoop::quit );
+    timer.start(_NetworkHandler_Sync_WaitTimer);
+    loop.exec();
+
+    if (success)
+    {
+        qDebug() << "    -- no error";
+        emit downloaded();
+    }
+    else
+    {
+        qDebug() << "    -- error :(";
+        emit downloadFailed();
+    }
+}
+
+
+
+QByteArray NetworkHandler::downloadedData() const {
+    return m_DownloadedData;
+}
+
+
+
 bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilename)
 {
+    qDebug() << "upload lauched for file " << path;
+
     QString distPath = distantFilename;
     if (distPath == "")
         distPath = path;
@@ -69,12 +154,17 @@ bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilen
     ulUrl.setPassword(ULPassword);
     ulUrl.setUserName(ULUserName);
 
-    QFile file(localPath + path);
-    file.open(QIODevice::ReadOnly);
-    QNetworkAccessManager *nam = new QNetworkAccessManager;
-    QNetworkRequest requp(ulUrl);
-    QNetworkReply *reply = nam->put(requp,&file);
+    // QFile file(localPath + path);
+    m_UploadData.setFileName(localPath + path);
+    m_UploadData.open(QIODevice::ReadOnly);
+    // QNetworkAccessManager *nam = new QNetworkAccessManager;
 
+    // QNetworkReply *reply = m_WebCtrl_UL.put(requp, &m_UploadData);
+    QNetworkRequest requp(ulUrl);
+    m_WebCtrl_UL.put(requp, &m_UploadData);
+
+
+    /*
     QEventLoop loop;
     connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
     connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), &loop, SLOT(quit()));
@@ -87,8 +177,9 @@ bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilen
         reply->close();
         return true;
     }
+    */
 
-    reply->close();
+    // reply->close();
     return false;
     // emit downloaded();
 }
@@ -97,25 +188,38 @@ bool NetworkHandler::UploadFile(const QString& path, const QString& distantFilen
 
 
 
-void NetworkHandler::fileDownloaded(QNetworkReply* pReply)
+void NetworkHandler::fileUploaded(QNetworkReply* pReply)
 {
-    m_DownloadedData = pReply->readAll();
-    //emit a signal
-    pReply->deleteLater();
+    //qDebug() << "=== entering fileUploaded()";
 
+    bool success = false;
 
-    // Save the data to a file.
-    QSaveFile file(fileNameToSaveTo);
-    file.open(QIODevice::WriteOnly);
-    file.write(m_DownloadedData);
-    // Calling commit() is mandatory, otherwise nothing will be written.
-    file.commit();
+    if (pReply->error()==QNetworkReply::NoError)
+    {
+        pReply->close();
+        success = true;
+    }
 
-    emit downloaded();
-}
+    m_UploadData.close();
 
-QByteArray NetworkHandler::downloadedData() const {
-    return m_DownloadedData;
+    // actually, setting a small timer allows the state machine to work properly
+    QTimer timer;
+    timer.setSingleShot(true);
+    QEventLoop loop;
+    connect( &timer, &QTimer::timeout, &loop, &QEventLoop::quit );
+    timer.start(_NetworkHandler_Sync_WaitTimer);
+    loop.exec();
+
+    if (success)
+    {
+        //qDebug() << "    -- no error";
+        emit uploaded();
+    }
+    else
+    {
+        qDebug() << "    -- error :(";
+        emit uploadFailed();
+    }
 }
 
 
@@ -126,11 +230,14 @@ void NetworkHandler::softSync()
     {
         qDebug() << "----";
         qDebug() << "Starting the SOFT synchronization process...";
-        if (this->synchronize())
+        /*
+        //if (this->synchronize())
         {
             qDebug() << "... The SOFT synchronization process ended well.";
             qDebug() << "----";
         }
+        */
+        this->synchronize();
     }
 }
 
@@ -142,11 +249,14 @@ void NetworkHandler::hardSync()
     {
         qDebug() << "----";
         qDebug() << "Starting the HARD synchronization process...";
+        this->synchronize(false, true);
+        /*
         if (this->synchronize(false, true))
         {
             qDebug() << "... The HARD synchronization process ended well.";
             qDebug() << "----";
         }
+        */
     }
 }
 
@@ -158,20 +268,56 @@ bool NetworkHandler::networkSyncEquals(const _NetworkHandler_SyncEntry& nsa, con
 
 
 
-bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
+void NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 {
+
+    //QString fCQStr =  (firstCheck) ? " first check mode ON" : "";
+    // QString hSQStr =  (hardSync) ? " hard sync mode ON" : "";
+    // qDebug() << "entering synchronize()" << fCQStr << hSQStr;
+
+
+    firstCheckMode = firstCheck;
+    hardSyncMode = hardSync;
+
+    if (!this->NetworkConfLoaded)
+    {
+        qDebug() << "No network configuration was loaded";
+        return;
+    }
+
+    // first thing we need to do is to download the sync data file
+    connect( this, SIGNAL(downloaded()), this, SLOT(syncDetermineQueues()) );
+
+    this->DownloadFile(this->syncDataFilename);
+
+    return;
+
+
+
+/*
     bool distantCheck = firstCheck;
 
     if (!this->NetworkConfLoaded)
         return false;
 
     // load the sync file, in case someone else is working on it at roughly the same moment..
-    //if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
-    //    qDebug() << "there was an issue loading the synchronization file";
+    if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
+        qDebug() << "there was an issue loading the synchronization file";
 
+
+    this->annotationsDownloadQueue.clear();
+    this->annotationsDownloadPos = 0;
+    this->annotationsUploadQueue.clear();
+    this->annotationsUploadPos = 0;
+    this->downloadSimpleList.clear();
+    this->downloadListPos = 0;
 
     if (firstCheck)
     {
+        QtCvUtils::generatePath( QString(localPath + this->imgRelativePath).toStdString().c_str() );
+        QtCvUtils::generatePath( QString(localPath + this->annotsRelativePath).toStdString().c_str() );
+
+
         // at first, synchronize the images
         for (size_t k=0; k<this->ImagesFileList.size(); k++)
         {
@@ -181,12 +327,17 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                 // if we lack some images, we have never been synchronized, so we'll need to check everything anyway
                 distantCheck = true;
 
+                downloadSimpleList.push_back(this->imgRelativePath + this->ImagesFileList[k]);
+
+                /*
+
                 // need to download the file
                 if (!this->DownloadFileByUrl(this->imgRelativePath + this->ImagesFileList[k]))
                 {
                     qDebug() << "we had an issue downloading the image file " + this->ImagesFileList[k];
                 }
-
+                */
+/*
                 // this->ImagesSyncList[k] = _NHSS_Synchronized;
             }
         }
@@ -200,6 +351,296 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
     if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
         qDebug() << "there was an issue loading the synchronization file";
 
+
+    /*
+    // in any case, synchronize the SyncData file
+    if (!this->DownloadFileByUrl(this->syncDataFilename))
+         qDebug() << "we had an issue downloading the synchronization file " + this->syncDataFilename;
+    else
+    {
+        // read it then
+        if (!this->loadSyncDataFile())
+            qDebug() << "we had an issue loading the synch file locally";
+        else
+        {
+        */
+    /*
+    // now compare it with what we have locally
+    for (size_t k=0; k<this->SyncEntries.size(); k++)
+    {
+        bool skip = false;
+
+        // check if this file is in the list of known new stuff, in which case : don't touch that
+        for (size_t i=0; i<this->KnownNewAnnotations.size(); i++)
+            if (this->KnownNewAnnotations[i]==this->ImagesFileList[k])
+            {
+                skip = true;
+                break;
+            }
+
+        if (skip)
+            continue;
+
+        if (this->SyncEntries[k].size()>0)
+        {
+            // there's at least one entry
+            _NetworkHandler_SyncEntry currEntry = this->SyncEntries[k][this->SyncEntries[k].size()-1];
+            QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currEntry.ImageFileName);
+            QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currEntry.FilenamePostfix);
+
+            currEntry.ImageIndex = k;
+
+
+            // now we want to determine if we have to download the distant file
+            bool doWeDownload =    !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixYaml).toStdString() )
+                                || !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixCsv ).toStdString() );
+
+            // if we cannot find the corresponding file on the local system : we have to download the file
+
+            // another case is HardSync. If we're in hard sync mode and the file exists, it should be recorded locally somewhere
+            // in this case, if the entry is different, then: we have to download it
+
+            if (hardSync)
+            {
+                if (this->LocalSyncEntries[k].size()==0)
+                    doWeDownload = true;
+                else if (!this->networkSyncEquals(LocalSyncEntries[k][0],currEntry))
+                    doWeDownload = true;
+            }
+
+            // if we download it, we also save it
+            if (doWeDownload)
+            {
+                currEntry.csvDone = false;
+
+                this->annotationsDownloadQueue.push_back(currEntry);
+*/
+                /*
+                if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml))
+                    qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixYaml;
+                if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv))
+                    qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixCsv;
+
+                // qDebug() << "downloaded file " << localPathWithoutExtension;
+                qDebug() << "donloaded annotation for image file " << this->ImagesFileList[k];
+
+                this->LocalSyncEntries[k].clear();
+                this->LocalSyncEntries[k].push_back(currEntry);
+                */
+/*
+                newLocalEntries = true;
+            }
+
+            // one last case (mostly when it's a first synchronization : there's no entry because the
+        }
+        else if (hardSync || firstCheck)
+        {
+            // no entry detected, but we check if there's an annotation file.
+            // if so, we need to synchronize it
+            if (    QtCvUtils::fileExists( QString(this->localPath + this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml).toStdString() )
+                 && QtCvUtils::fileExists( QString(this->localPath + this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv ).toStdString() ) )
+            {
+                _NetworkHandler_SyncEntry newEntry;
+                newEntry.ImageFileName = this->ImagesFileList[k].toStdString();
+                newEntry.FilenamePostfix = "";  // no need for a postfix since it's supposed to be a first entry
+                newEntry.Author = this->annotaterName.toStdString();
+                newEntry.DateTime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss").toStdString();
+                newEntry.ImageIndex = k;
+                newEntry.csvDone = false;
+
+                this->annotationsUploadQueue.push_back(newEntry);
+*/
+                /*
+                if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
+                     && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
+                {
+                    qDebug() << "uploaded annotation for image file " << this->ImagesFileList[k];
+
+                    newEntries = true;
+                    this->SyncEntries[k].push_back(newEntry);
+                    this->LocalSyncEntries[k].clear();
+                    this->LocalSyncEntries[k].push_back(newEntry);
+                    newLocalEntries = true;
+                }
+                */
+/*            }
+        }
+    }
+
+
+
+    // alright, now handling the known additional stuff
+    for (size_t k=0; k<this->KnownNewAnnotations.size(); k++)
+    {
+        size_t imageId = 0;
+        for (imageId=0; imageId<this->ImagesFileList.size(); imageId++)
+        {
+            if (this->KnownNewAnnotations[k] == this->ImagesFileList[imageId])
+                break;
+        }
+
+        QString newPostfix = (this->SyncEntries[imageId].size() > 0) ? "_" + QString::number((int)this->SyncEntries[imageId].size()) : "";
+
+        _NetworkHandler_SyncEntry newEntry;
+        newEntry.ImageFileName = this->ImagesFileList[imageId].toStdString();
+        newEntry.FilenamePostfix = newPostfix.toStdString();  // no need for a postfix since it's supposed to be a first entry
+        newEntry.Author = this->annotaterName.toStdString();
+        newEntry.DateTime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss").toStdString();
+
+
+        for (size_t IId=0; IId<this->ImagesFileList.size(); IId++)
+        {
+            // inserting the new entry directly in place
+            // actually, it might be possible to not start from 0 but the last tested index since everytime the file is recorded it should be ordered properly...
+            if (this->ImagesFileList[IId] == QString::fromStdString(newEntry.ImageFileName))
+            {
+                newEntry.ImageIndex = IId;
+            }
+        }
+
+        newEntry.csvDone = false;
+
+        annotationsUploadQueue.push_back(newEntry);
+*/
+        /*
+        if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixYaml, this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixYaml)
+             && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixCsv , this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixCsv) )
+        {
+            qDebug() << "uploaded annotation for image file " << this->ImagesFileList[imageId];
+
+            newEntries = true;
+            this->SyncEntries[imageId].push_back(newEntry);
+            this->LocalSyncEntries[imageId].clear();
+            this->LocalSyncEntries[imageId].push_back(newEntry);
+            newLocalEntries = true;
+        }
+        else
+            qDebug() << "trouble uploading the " << this->KnownNewAnnotations[k] << " new annotation file";
+        */
+/*    }
+
+
+    qDebug() << "list of files to download :";
+    for (size_t i=0; i<this->downloadSimpleList.size(); i++)
+        qDebug() << this->downloadSimpleList[i];
+
+    qDebug() << "list of annotation files to download : ";
+    for (size_t i=0; i<this->annotationsDownloadQueue.size(); i++)
+        qDebug() << QString::fromStdString(this->annotationsDownloadQueue[i].ImageFileName + this->annotationsDownloadQueue[i].FilenamePostfix);
+
+    qDebug() << "list of annotation files to upload : ";
+    for (size_t i=0; i<this->annotationsUploadQueue.size(); i++)
+        qDebug() << QString::fromStdString(this->annotationsUploadQueue[i].ImageFileName + this->annotationsUploadQueue[i].FilenamePostfix);
+
+
+    // now going into "processing the queues" mode
+    disconnect( this, SIGNAL(downloaded()), this, SLOT(syncDetermineQueues()) );
+    connect( this, SIGNAL(downloaded()), this, SLOT(syncProcessQueues()) );
+    connect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessQueues()) );
+
+    this->syncProcessQueues();
+
+
+    newEntries = false;
+    newLocalEntries = false;
+    // now, simply record the new entries
+    if (newEntries)
+    {
+        if (!this->recordSyncDataFile() || !this->UploadFile(this->syncDataFilename))
+            qDebug() << "issue saving and uploading the sync data file";
+        //else
+        //    qDebug() << "saved the sync data file alright";
+    }
+    else if (newLocalEntries)
+    {
+        if (!this->recordSyncDataFile(true))
+            qDebug() << "having troubles saving the local only sync data file";
+    }
+
+    this->KnownNewAnnotations.clear();
+
+    return true;
+    */
+}
+
+
+void NetworkHandler::syncDetermineQueues()
+{
+
+    // qDebug() << "entering syncDetermineQueues()";
+
+
+    CurrentSyncStep = _NHSyncStep_DetermineQueues;
+
+    // bool distantCheck = firstCheck;
+
+    /*
+    if (!this->NetworkConfLoaded)
+    {
+        // maybe perform the disconnecting stuff
+        return;
+    }
+
+    // load the sync file, in case someone else is working on it at roughly the same moment..
+    if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
+        qDebug() << "there was an issue loading the synchronization file";
+        */
+
+    // when we're there, we've just downloaded the new Sync csv file
+    disconnect(this, SIGNAL(downloaded()), this, SLOT(syncDetermineQueues()));
+
+    if (!this->loadSyncDataFile())
+        // no need to go further, there's an issue here
+        return;
+
+
+    this->annotationsDownloadQueue.clear();
+    this->annotationsDownloadPos = 0;
+    this->annotationsUploadQueue.clear();
+    this->annotationsUploadPos = 0;
+    this->downloadSimpleList.clear();
+    this->downloadListPos = 0;
+
+    if (firstCheckMode)
+    {
+        QtCvUtils::generatePath( QString(localPath + this->imgRelativePath).toStdString().c_str() );
+        QtCvUtils::generatePath( QString(localPath + this->annotsRelativePath).toStdString().c_str() );
+
+
+        // at first, synchronize the images
+        for (size_t k=0; k<this->ImagesFileList.size(); k++)
+        {
+            if (!QtCvUtils::fileExists( QString(this->localPath + this->imgRelativePath + this->ImagesFileList[k]).toStdString() ))
+            {
+
+                // if we lack some images, we have never been synchronized, so we'll need to check everything anyway
+                //  distantCheck = true;
+
+                downloadSimpleList.push_back(this->imgRelativePath + this->ImagesFileList[k]);
+
+                /*
+
+                // need to download the file
+                if (!this->DownloadFileByUrl(this->imgRelativePath + this->ImagesFileList[k]))
+                {
+                    qDebug() << "we had an issue downloading the image file " + this->ImagesFileList[k];
+                }
+                */
+
+                // this->ImagesSyncList[k] = _NHSS_Synchronized;
+            }
+        }
+    }
+
+
+    // std::vector<_NetworkHandler_SyncEntry> additionalEntries;
+    newEntries = false;
+    newLocalEntries = false;
+
+    /*
+    if (!this->DownloadFileByUrl(this->syncDataFilename) || !this->loadSyncDataFile())
+        qDebug() << "there was an issue loading the synchronization file";
+    */
 
     /*
     // in any case, synchronize the SyncData file
@@ -236,6 +677,8 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
             QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currEntry.ImageFileName);
             QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currEntry.FilenamePostfix);
 
+            currEntry.ImageIndex = k;
+
 
             // now we want to determine if we have to download the distant file
             bool doWeDownload =    !QtCvUtils::fileExists( QString(this->localPath + localPathWithoutExtension + this->annotsPostfixYaml).toStdString() )
@@ -246,7 +689,7 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
             // another case is HardSync. If we're in hard sync mode and the file exists, it should be recorded locally somewhere
             // in this case, if the entry is different, then: we have to download it
 
-            if (hardSync)
+            if (hardSyncMode)
             {
                 if (this->LocalSyncEntries[k].size()==0)
                     doWeDownload = true;
@@ -257,6 +700,11 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
             // if we download it, we also save it
             if (doWeDownload)
             {
+                currEntry.csvDone = false;
+
+                this->annotationsDownloadQueue.push_back(currEntry);
+
+                /*
                 if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml))
                     qDebug() << "troubles downloading " << distantPathWithoutExtension << this->annotsPostfixYaml;
                 if (!this->DownloadFileByUrl(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv))
@@ -267,13 +715,14 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 
                 this->LocalSyncEntries[k].clear();
                 this->LocalSyncEntries[k].push_back(currEntry);
+                */
 
                 newLocalEntries = true;
             }
 
             // one last case (mostly when it's a first synchronization : there's no entry because the
         }
-        else if (hardSync || firstCheck)
+        else if (hardSyncMode || firstCheckMode)
         {
             // no entry detected, but we check if there's an annotation file.
             // if so, we need to synchronize it
@@ -285,7 +734,12 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                 newEntry.FilenamePostfix = "";  // no need for a postfix since it's supposed to be a first entry
                 newEntry.Author = this->annotaterName.toStdString();
                 newEntry.DateTime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss").toStdString();
+                newEntry.ImageIndex = k;
+                newEntry.csvDone = false;
 
+                this->annotationsUploadQueue.push_back(newEntry);
+
+                /*
                 if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixYaml)
                      && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[k] + this->annotsPostfixCsv) )
                 {
@@ -297,6 +751,7 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
                     this->LocalSyncEntries[k].push_back(newEntry);
                     newLocalEntries = true;
                 }
+                */
             }
         }
     }
@@ -321,6 +776,22 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
         newEntry.Author = this->annotaterName.toStdString();
         newEntry.DateTime = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss").toStdString();
 
+
+        for (size_t IId=0; IId<this->ImagesFileList.size(); IId++)
+        {
+            // inserting the new entry directly in place
+            // actually, it might be possible to not start from 0 but the last tested index since everytime the file is recorded it should be ordered properly...
+            if (this->ImagesFileList[IId] == QString::fromStdString(newEntry.ImageFileName))
+            {
+                newEntry.ImageIndex = IId;
+            }
+        }
+
+        newEntry.csvDone = false;
+
+        annotationsUploadQueue.push_back(newEntry);
+
+        /*
         if (    this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixYaml, this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixYaml)
              && this->UploadFile(this->annotsRelativePath + this->ImagesFileList[imageId] + this->annotsPostfixCsv , this->annotsRelativePath + this->ImagesFileList[imageId] + newPostfix + this->annotsPostfixCsv) )
         {
@@ -328,33 +799,329 @@ bool NetworkHandler::synchronize(bool firstCheck, bool hardSync)
 
             newEntries = true;
             this->SyncEntries[imageId].push_back(newEntry);
-            this->LocalSyncEntries[k].clear();
-            this->LocalSyncEntries[k].push_back(newEntry);
+            this->LocalSyncEntries[imageId].clear();
+            this->LocalSyncEntries[imageId].push_back(newEntry);
             newLocalEntries = true;
         }
         else
             qDebug() << "trouble uploading the " << this->KnownNewAnnotations[k] << " new annotation file";
+        */
+    }
+
+    /*
+    qDebug() << "list of image files to download :";
+    for (size_t i=0; i<this->downloadSimpleList.size(); i++)
+        qDebug() << this->downloadSimpleList[i];
+
+    qDebug() << "list of annotation files to download : ";
+    for (size_t i=0; i<this->annotationsDownloadQueue.size(); i++)
+        qDebug() << QString::fromStdString(this->annotationsDownloadQueue[i].ImageFileName + this->annotationsDownloadQueue[i].FilenamePostfix);
+
+    qDebug() << "list of annotation files to upload : ";
+    for (size_t i=0; i<this->annotationsUploadQueue.size(); i++)
+        qDebug() << QString::fromStdString(this->annotationsUploadQueue[i].ImageFileName + this->annotationsUploadQueue[i].FilenamePostfix);
+    */
+
+    // there's no chance that we're doing any new first check, unless it's specified by loading a new configuration file
+    firstCheckMode = false;
+
+
+    // now going into "processing the queues" mode
+    disconnect( this, SIGNAL(downloaded()), this, SLOT(syncDetermineQueues()) );
+
+    /*
+    connect( this, SIGNAL(downloaded()), this, SLOT(syncProcessQueues()) );
+    connect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessQueues()) );
+    */
+
+    // now go to the next
+    emit queuesDetermined();
+}
+
+
+/*
+void NetworkHandler::syncProcessQueues()
+{
+    qDebug() << "Entering syncProcessQueues()";
+
+    if (this->downloadListPos < static_cast<int>(this->downloadSimpleList.size()))
+    {
+        qDebug() << ". Image downloading section()";
+
+        QString fileToDL = this->downloadSimpleList[this->downloadListPos];
+
+        // process to download the next file in queue
+        this->downloadListPos++;
+        this->DownloadFile(fileToDL);
+    }
+    else if (this->annotationsDownloadPos < static_cast<int>(this->annotationsDownloadQueue.size()))
+    {
+        qDebug() << ". Annotations downloading section";
+
+        // now: we are in the state of proceeding to the download of
+        disconnect( this, SIGNAL(downloaded()), this, SLOT(syncProcessQueues()) );
+        connect( this, SIGNAL(downloaded()), this, SLOT(recordAnnotationDownload()) );
+        connect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessQueues()) );
+        connect( this, SIGNAL(annotationDownloadRecorded()), this, SLOT(syncProcessQueues()) );
+
+        // be careful about signals
+        currentlyDownloadedEntry = this->annotationsDownloadQueue[this->annotationsDownloadPos];
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyDownloadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyDownloadedEntry.FilenamePostfix);
+
+        this->DownloadFile(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv);
+        this->annotationsDownloadPos++;
+    }
+    else if (this->annotationsUploadPos < static_cast<int>(this->annotationsUploadQueue.size()))
+    {
+        qDebug() << ". Annotations uploading section";
+
+        disconnect( this, SIGNAL(downloaded()), this, SLOT(recordAnnotationDownload()) );
+        disconnect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessQueues()) );
+        disconnect( this, SIGNAL(annotationDownloadRecorded()), this, SLOT(syncProcessQueues()) );
+
+        connect( this, SIGNAL(uploaded()), this, SLOT(recordAnnotationUpload()) );
+        connect( this, SIGNAL(annotationUploadRecorded()), this, SLOT(syncProcessQueues()) );
+        connect( this, SIGNAL(uploadFailed()), this, SLOT(syncProcessQueues()) );
+
+        currentlyUploadedEntry = this->annotationsUploadQueue[this->annotationsUploadPos];
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyUploadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
+
+        this->UploadFile(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv);
+
+    }
+    else
+    {
+        qDebug() << ". All the queues have been processed";
+        // all the queues have been processed
+        // so we need to disconnect the upload and download confirmations from the thing and proceed to saving the sync csv files
+
+        disconnect( this, SIGNAL(downloaded()), this, SLOT(recordAnnotationUpload()) );
+        disconnect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessQueues()) );
+        disconnect( this, SIGNAL(uploaded()), this, SLOT(recordAnnotationUpload()) );
+        disconnect( this, SIGNAL(annotationUploadRecorded()), this, SLOT(syncProcessQueues()) );
+        disconnect( this, SIGNAL(uploadFailed()), this, SLOT(syncProcessQueues()) );
     }
 
 
-    // now, simply record the new entries
-    if (newEntries)
+}
+*/
+
+
+
+void NetworkHandler::syncProcessImagesQueue()
+{
+    // qDebug() << "Entering syncProcessImagesQueue()";
+
+    if (CurrentSyncStep!=_NHSyncStep_ImagesDL)
     {
-        if (!this->recordSyncDataFile() || !this->UploadFile(this->syncDataFilename))
-            qDebug() << "issue saving and uploading the sync data file";
-        //else
-        //    qDebug() << "saved the sync data file alright";
+        // handle signals and slots connections locally seems much more efficient to me
+        connect( this, SIGNAL(downloaded()), this, SLOT(syncProcessImagesQueue()) );
+        connect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessImagesQueue()) );
+        CurrentSyncStep = _NHSyncStep_ImagesDL;
     }
-    else if (newLocalEntries)
+
+    if (this->downloadListPos < static_cast<int>(this->downloadSimpleList.size()))
     {
-        if (!this->recordSyncDataFile(true))
-            qDebug() << "having troubles saving the local only sync data file";
+        // qDebug() << ". Image downloading section()";
+
+        QString fileToDL = this->downloadSimpleList[this->downloadListPos];
+
+        // process to download the next file in queue
+        this->downloadListPos++;
+        this->DownloadFile(fileToDL);
     }
+    else
+    {
+        disconnect( this, SIGNAL(downloaded()), this, SLOT(syncProcessImagesQueue()) );
+        disconnect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessImagesQueue()) );
+
+        emit imagesQueueProcessed();
+    }
+}
+
+
+
+void NetworkHandler::syncProcessAnnotsDLQueue()
+{
+    // qDebug() << "Entering syncProcessAnnotsDLQueue()";
+
+    if (CurrentSyncStep!=_NHSyncStep_AnnotsDL)
+    {
+        // qDebug() << ".setting the signals and stuff";
+
+        // handle signals and slots connections locally seems much more efficient to me
+        connect( this, SIGNAL(downloaded()), this, SLOT(recordAnnotationDownload()) );
+        connect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessAnnotsDLQueue()) );
+        connect( this, SIGNAL(annotationDownloadRecorded()), this, SLOT(syncProcessAnnotsDLQueue()) );
+        CurrentSyncStep = _NHSyncStep_AnnotsDL;
+    }
+
+    if (this->annotationsDownloadPos < static_cast<int>(this->annotationsDownloadQueue.size()))
+    {
+        // qDebug() << ". Annotations downloading section";
+
+        // be careful about signals
+        currentlyDownloadedEntry = this->annotationsDownloadQueue[this->annotationsDownloadPos];
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyDownloadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyDownloadedEntry.FilenamePostfix);
+
+        this->DownloadFile(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv);
+        this->annotationsDownloadPos++;
+    }
+    else
+    {
+        disconnect( this, SIGNAL(downloaded()), this, SLOT(recordAnnotationDownload()) );
+        disconnect( this, SIGNAL(downloadFailed()), this, SLOT(syncProcessAnnotsDLQueue()) );
+        disconnect( this, SIGNAL(annotationDownloadRecorded()), this, SLOT(syncProcessAnnotsDLQueue()) );
+
+        emit annotsDownloadQueueProcessed();
+    }
+
+}
+
+
+void NetworkHandler::recordAnnotationDownload()
+{
+    // qDebug() << "recordAnnotationDownload() called";
+
+    if (!currentlyDownloadedEntry.csvDone)
+    {
+        // qDebug() << " csv part";
+
+        // if we're here, that's because we've just downloaded the csv file
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyDownloadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyDownloadedEntry.FilenamePostfix);
+
+        currentlyDownloadedEntry.csvDone = true;
+        this->DownloadFile(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml);
+    }
+    else
+    {
+        // qDebug() << " yaml part";
+
+        // the download went alright, record it
+        this->SyncEntries[currentlyDownloadedEntry.ImageIndex].push_back(currentlyDownloadedEntry);
+        this->LocalSyncEntries[currentlyDownloadedEntry.ImageIndex].clear();
+        this->LocalSyncEntries[currentlyDownloadedEntry.ImageIndex].push_back(currentlyDownloadedEntry);
+        newLocalEntries = true;
+
+
+        emit annotationDownloadRecorded();
+    }
+}
+
+
+
+
+void NetworkHandler::syncProcessAnnotsULQueue()
+{
+    // qDebug() << "Entering syncProcessAnnotsULQueue()";
+
+    if (CurrentSyncStep!=_NHSyncStep_AnnotsUL)
+    {
+        // qDebug() << ".setting the signals and stuff";
+
+        // handle signals and slots connections locally seems much more efficient to me
+        connect( this, SIGNAL(uploaded()), this, SLOT(recordAnnotationUpload()) );
+        connect( this, SIGNAL(uploadFailed()), this, SLOT(syncProcessAnnotsULQueue()) );
+        connect( this, SIGNAL(annotationUploadRecorded()), this, SLOT(syncProcessAnnotsULQueue()) );
+        CurrentSyncStep = _NHSyncStep_AnnotsUL;
+    }
+
+    if (this->annotationsUploadPos < static_cast<int>(this->annotationsUploadQueue.size()))
+    {
+        // qDebug() << ". Annotations uploading section";
+
+        currentlyUploadedEntry = this->annotationsUploadQueue[this->annotationsUploadPos];
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyUploadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
+
+        this->UploadFile(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv);
+        this->annotationsUploadPos++;
+    }
+    else
+    {
+        disconnect( this, SIGNAL(uploaded()), this, SLOT(recordAnnotationUpload()) );
+        disconnect( this, SIGNAL(uploadFailed()), this, SLOT(syncProcessAnnotsULQueue()) );
+        disconnect( this, SIGNAL(annotationUploadRecorded()), this, SLOT(syncProcessAnnotsULQueue()) );
+
+        emit annotsUploadQueueProcessed();
+    }
+}
+
+
+void NetworkHandler::recordAnnotationUpload()
+{
+    if (!currentlyUploadedEntry.csvDone)
+    {
+        // qDebug() << " csv part";
+
+        // if we're here, that's because we've just downloaded the csv file
+        QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyUploadedEntry.ImageFileName);
+        QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
+
+        currentlyUploadedEntry.csvDone = true;
+        this->UploadFile(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml);
+    }
+    else
+    {
+        // qDebug() << " yaml part";
+
+        // the download went alright, record it
+        this->SyncEntries[currentlyUploadedEntry.ImageIndex].push_back(currentlyUploadedEntry);
+        this->LocalSyncEntries[currentlyUploadedEntry.ImageIndex].clear();
+        this->LocalSyncEntries[currentlyUploadedEntry.ImageIndex].push_back(currentlyUploadedEntry);
+
+        newLocalEntries = true;
+        newEntries = true;
+
+        emit annotationUploadRecorded();
+    }
+}
+
+
+
+void NetworkHandler::syncProcessSave()
+{
+    // qDebug() << "Entering syncProcessSave()";
+
+    this->CurrentSyncStep = _NHSyncStep_Recording;
+
+    if (this->newLocalEntries || this->newEntries)
+    {
+        // record the
+        if (!this->recordSyncDataFile(!this->newEntries))
+            qDebug() << "having troubles saving the sync data file";
+    }
+    if (this->newEntries)
+    {
+        connect(this, SIGNAL(uploaded()), this, SLOT(syncProcessEnd()));
+        this->UploadFile(this->syncDataFilename);
+    }
+
+    this->syncProcessEnd();
+}
+
+
+
+
+void NetworkHandler::syncProcessEnd()
+{
+    qDebug() << "Entering syncProcessEnd()";
+
+    disconnect(this, SIGNAL(uploaded()), this, SLOT(syncProcessEnd()));
 
     this->KnownNewAnnotations.clear();
 
-    return true;
+    QString fCQStr =  (firstCheckMode) ? " - first check mode ON" : "";
+    QString hSQStr =  (hardSyncMode) ? "in HARD sync mode" : "in SOFT sync mode";
+    qDebug() << "----";
+    qDebug() << "Ended the synchronization process" << hSQStr << fCQStr;
 }
+
+
 
 
 
@@ -462,7 +1229,7 @@ bool NetworkHandler::loadNetworkConfiguration(const QString& configFilePath)
     qDebug() << "Network Configuration file loaded";
     qDebug() << "----";
 
-    return this->synchronize(true);
+    this->synchronize(true);
 }
 
 
@@ -528,6 +1295,7 @@ bool NetworkHandler::loadSyncDataFile()
             // actually, it might be possible to not start from 0 but the last tested index since everytime the file is recorded it should be ordered properly...
             if (this->ImagesFileList[k] == QString::fromStdString(currEntry.ImageFileName))
             {
+                currEntry.ImageIndex = k;
                 this->SyncEntries[k].push_back(currEntry);
                 break;
             }
@@ -576,6 +1344,7 @@ bool NetworkHandler::loadSyncDataFile()
                 // actually, it might be possible to not start from 0 but the last tested index since everytime the file is recorded it should be ordered properly...
                 if (this->ImagesFileList[k] == QString::fromStdString(currEntry.ImageFileName))
                 {
+                    currEntry.ImageIndex = k;
                     this->LocalSyncEntries[k].push_back(currEntry);
                     break;
                 }
@@ -586,16 +1355,17 @@ bool NetworkHandler::loadSyncDataFile()
         fsInLocal.close();
     }
 
+
     /*
     qDebug() << "distant entries :";
     for (size_t k=0; k<this->SyncEntries.size(); k++)
     {
         for (size_t j=0; j<this->SyncEntries[k].size(); j++)
         {
-            qDebug() << "line " << k << " : " << QString::fromStdString(this->SyncEntries[k][j].ImageFileName) << " - " <<
-                                                 QString::fromStdString(this->SyncEntries[k][j].FilenamePostfix) << " - " <<
-                                                 QString::fromStdString(this->SyncEntries[k][j].Author) << " - " <<
-                                                 QString::fromStdString(this->SyncEntries[k][j].DateTime);
+            qDebug() << "line " << k << "," << j << " : " << QString::fromStdString(this->SyncEntries[k][j].ImageFileName) << " - " <<
+                                                             QString::fromStdString(this->SyncEntries[k][j].FilenamePostfix) << " - " <<
+                                                             QString::fromStdString(this->SyncEntries[k][j].Author) << " - " <<
+                                                             QString::fromStdString(this->SyncEntries[k][j].DateTime);
         }
     }
 
@@ -611,6 +1381,7 @@ bool NetworkHandler::loadSyncDataFile()
         }
     }
     */
+
 
     return true;
 }
