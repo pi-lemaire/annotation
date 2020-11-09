@@ -465,7 +465,8 @@ void MainWindow::loadNetworkConf()
                                tr("Open Network Configuration File"), QDir::currentPath(), tr("XML/YAML/JSON file (*.xml *.yaml *.json)"));
     if (!fileName.isEmpty())
     {
-        if (this->ntwrkHndlr->loadNetworkConfiguration(fileName))
+        this->ntwrkHndlr->loadNetworkConfiguration(fileName);
+        if (this->ntwrkHndlr->networkConfigLoaded())
         {
             qDebug() << "configuration loaded and synchronization alright";
         }

@@ -77,16 +77,16 @@ class NetworkHandler : public QObject {
         explicit NetworkHandler(QObject *parent = 0);
         virtual ~NetworkHandler();
 
-        bool DownloadFileByUrl(const QString& path, const QString& differentLocalPath="");
         void DownloadFile(const QString& distantFilename, const QString& localFilename="");
-        QByteArray downloadedData() const;
-
-        bool UploadFile(const QString& path, const QString& differentDistantPath="");
+        void UploadFile(const QString& path, const QString& differentDistantPath="");
+        // QByteArray downloadedData() const;
 
         void notifyNewAnnotationFile(const QString& correspondingImageFileName);
 
         void synchronize(bool firstCheck=false, bool hardSync=false);
-        bool loadNetworkConfiguration(const QString& configFilePath);
+
+        void loadNetworkConfiguration(const QString& configFilePath);
+        bool networkConfigLoaded() const { return this->NetworkConfLoaded; }
 
 
     public slots:
@@ -130,8 +130,9 @@ class NetworkHandler : public QObject {
 
         bool networkSyncEquals(const _NetworkHandler_SyncEntry&, const _NetworkHandler_SyncEntry&) const;
 
-        QNetworkAccessManager m_WebCtrl;
-        QNetworkAccessManager m_WebCtrl_DL, m_WebCtrl_UL;
+        // QNetworkAccessManager m_WebCtrl;
+        //QNetworkAccessManager m_WebCtrl_DL, m_WebCtrl_UL;
+        QNetworkAccessManager *WebCtrl_DL, *WebCtrl_UL;;
         QByteArray m_DownloadedData;
         QFile m_UploadData;
         QString fileNameToSaveTo;
