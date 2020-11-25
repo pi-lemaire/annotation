@@ -530,7 +530,7 @@ void NetworkHandler::syncProcessAnnotsULQueue()
         QString localPathWithoutExtension = this->annotsRelativePath + QString::fromStdString(currentlyUploadedEntry.ImageFileName);
         QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
 
-        this->UploadFile(distantPathWithoutExtension + this->annotsPostfixCsv, localPathWithoutExtension + this->annotsPostfixCsv);
+        this->UploadFile(localPathWithoutExtension + this->annotsPostfixCsv, distantPathWithoutExtension + this->annotsPostfixCsv);
         this->annotationsUploadPos++;
     }
     else
@@ -555,7 +555,7 @@ void NetworkHandler::recordAnnotationUpload()
         QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
 
         currentlyUploadedEntry.csvDone = true;
-        this->UploadFile(distantPathWithoutExtension + this->annotsPostfixYaml, localPathWithoutExtension + this->annotsPostfixYaml);
+        this->UploadFile(this->annotsPostfixYaml, distantPathWithoutExtension + this->annotsPostfixYaml);
     }
     else
     {
