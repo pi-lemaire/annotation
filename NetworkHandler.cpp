@@ -555,7 +555,7 @@ void NetworkHandler::recordAnnotationUpload()
         QString distantPathWithoutExtension = localPathWithoutExtension + QString::fromStdString(currentlyUploadedEntry.FilenamePostfix);
 
         currentlyUploadedEntry.csvDone = true;
-        this->UploadFile(this->annotsPostfixYaml, distantPathWithoutExtension + this->annotsPostfixYaml);
+        this->UploadFile(localPathWithoutExtension + this->annotsPostfixYaml, distantPathWithoutExtension + this->annotsPostfixYaml);
     }
     else
     {
